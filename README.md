@@ -1,5 +1,7 @@
 # Orbit Window Manager (Orbit WM)
 
+![Orbit WM screenshot](public/example.jpeg)
+
 Orbit WM is a **browser-based tiling window manager** for **tmux-backed terminals** (and lightweight browser windows).
 
 It’s designed for “desktop-like” multi-window workflows inside a single web page:
