@@ -1,0 +1,16 @@
+{
+    "name": "Orbit Window Manager",
+    "short_name": "Orbit WM",
+    "description": "Orbit Window Manager",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0a0c12",
+    "theme_color": "#0a0c12",
+    "icons": [
+        {
+            "src": "/window.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}
