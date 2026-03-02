@@ -73,20 +73,6 @@ For hot-reload development, use:
 npm run orbit:dev
 ```
 
-### What Caddy does
-Caddy is the HTTPS front door for Orbit.
-
-Orbit has two internal HTTP services running on loopback:
-- frontend (`127.0.0.1:43121`)
-- middle API + Socket.IO (`127.0.0.1:43120`)
-
-Caddy listens on `https://<your-ip>:43123`, handles TLS (`tls internal`), and forwards traffic:
-- `/api/*` and `/socket.io/*` -> middle layer
-- everything else -> frontend
-
-So from your phone/tablet you only use one URL, and the browser sees a single secure origin for UI + API + WebSockets.
-
-
 ## Session management
 
 Orbit has session/device management because the app is powerful enough to open real shell sessions.
@@ -139,21 +125,21 @@ When you create a terminal window:
 
 If the middle layer restarts, it can restore sessions from SQLite *if the tmux session still exists*.
 
+### What Caddy does
+Caddy is the HTTPS front door for Orbit.
+
+Orbit has two internal HTTP services running on loopback:
+- frontend (`127.0.0.1:43121`)
+- middle API + Socket.IO (`127.0.0.1:43120`)
+
+Caddy listens on `https://<your-ip>:43123`, handles TLS (`tls internal`), and forwards traffic:
+- `/api/*` and `/socket.io/*` -> middle layer
+- everything else -> frontend
+
+So from your phone/tablet you only use one URL, and the browser sees a single secure origin for UI + API + WebSockets.
+
+
 ## Usage
-
-### Creating windows
-Use the menu button (top-right) → **New**:
-- **Terminal**: creates a tmux-backed terminal session
-- **Browser**: creates an iframe-based browser window
-
-### Layouts
-Use **Layouts** from the main menu to:
-- switch between saved layouts
-- create new layouts
-- delete layouts
-
-Keyboard:
-- `Meta+1..9` (or `Ctrl+1..9`) switches to layout slots 1-9
 
 ### Keyboard shortcuts
 Orbit WM uses a modifier key (currently defaults to **Ctrl**).
@@ -175,6 +161,7 @@ Menu → **Wallpaper / Terminal / Layout**:
 - Switch between built-in wallpapers or upload a custom wallpaper
 - Adjust terminal padding, opacity, color, and font
 - Adjust layout gap, borders, and shadows
+
 
 ## Configuration
 
