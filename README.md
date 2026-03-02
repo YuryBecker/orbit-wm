@@ -4,7 +4,7 @@
 
 Orbit WM is a **browser-based tiling window manager** for terminals (and local dev browser windows).
 
-It turns any browser (tablet, TV, spare laptop, iPad) into a tiled terminal “desktop”.
+It turns any browser (tablet, TV, spare laptop, iPad) into a tiled terminal desktop.
 You get multiple terminals and dashboards on one screen, layouts that come back after a restart, and a setup that looks and feels like a real window manager without installing a full Linux desktop or giving everyone SSH access.
 
 **TL;DR, Orbit WM is useful if you:**
@@ -128,6 +128,38 @@ Menu → **Wallpaper / Terminal / Layout**:
 - Switch between built-in wallpapers or upload a custom wallpaper
 - Adjust terminal padding, opacity, color, and font
 - Adjust layout gap, borders, and shadows
+
+## Session management
+
+Orbit has session/device management because the app is powerful enough to open real shell sessions.  
+If someone can reach the URL, you still want control over who actually gets in, and whether they can type or only watch.
+
+### Why it exists
+- It gives you a safe default for shared LAN use.
+- It lets you approve each device intentionally.
+- It lets you grant read-only terminal views for dashboards or demos.
+
+### How it works
+- **Admin session (local machine):** when you open Orbit on `127.0.0.1`, you’re treated as the local admin.
+- **Guest session (phone/tablet/computer):** when a new device opens the LAN URL, it creates a pending request and waits.
+- **Approval flow:** the admin gets a toast notification and can open **Devices → Manage Devices** to allow or deny.
+- **Permissions:** approved users can be `control` (can type/resize/create) or `readonly` (view-only).
+
+### Add Device (QR / link)
+- In the main menu, use **Devices → Add Device**.
+- Orbit opens a pairing dialog with:
+  - a QR code to scan on mobile
+  - a copyable link for sharing manually
+- You can generate either **Control** or **Readonly** pairing links directly from that dialog.
+
+### Device management UI
+In **Devices → Manage Devices**, you can:
+- review current pending requests
+- approve or deny requests
+- view known users
+- toggle a user between control and readonly
+- revoke tokens if someone should no longer have access
+- review request history in case someone was denied by mistake
 
 ## Configuration
 
