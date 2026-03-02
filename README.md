@@ -1,5 +1,7 @@
 # Orbit Window Manager (Orbit WM)
 
+[`demo.gif`](public/demo.gif)
+
 ![Orbit WM screenshot](public/example.jpeg)
 
 Orbit WM is a **browser-based tiling window manager** for terminals (and local dev browser windows).
