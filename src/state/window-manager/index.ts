@@ -1,5 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
+import clients from "state/clients";
 import config from "state/config";
 import { getMiddleBaseUrl } from "../baseUrl";
 import WindowPaneInstance from "./instance";
@@ -159,19 +160,17 @@ export class WindowManager {
         }
 
         try {
-            const response = await fetch(`${this.baseUrl}/api/session`, {
+            const authed = await clients.authFetch(`${this.baseUrl}/api/session`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
             });
-
-            if (!response.ok) {
-                console.error('Failed to create a new session:', response);
+            if (!authed.ok) {
+                console.error("Failed to create a new session:", authed);
                 return null;
             }
-
-            const payload = await response.json();
+            const payload = await authed.json();
             const createdId = payload.id as string;
 
             if (typeof window !== "undefined") {
@@ -698,7 +697,7 @@ export class WindowManager {
     /* ---- API ---- */
     /** Fetch a session payload by id. */
     public fetchSession = async (sessionId: string) => {
-        const response = await fetch(`${this.baseUrl}/api/session/${sessionId}`);
+        const response = await clients.authFetch(`${this.baseUrl}/api/session/${sessionId}`);
         if (!response.ok) {
             return null;
         }
@@ -712,7 +711,7 @@ export class WindowManager {
             return;
         }
 
-        await fetch(`${this.baseUrl}/api/session/${this.sessionId}`, {
+        await clients.authFetch(`${this.baseUrl}/api/session/${this.sessionId}`, {
             method: "PATCH",
             headers: {
                 "Content-Type": "application/json",
@@ -727,7 +726,7 @@ export class WindowManager {
     /** Create a new terminal session. */
     public addWindowPane = async () => {
         try {
-            const response = await fetch(`${this.baseUrl}/api/session`, {
+            const response = await clients.authFetch(`${this.baseUrl}/api/session`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

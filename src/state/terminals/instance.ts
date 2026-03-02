@@ -3,6 +3,7 @@ import { FitAddon, init, Terminal as GhosttyTerminal } from "ghostty-web";
 import { toast } from "sonner";
 import { io, Socket } from "socket.io-client";
 
+import clients from "state/clients";
 import config from "state/config";
 import { getMiddleBaseUrl } from "../baseUrl";
 
@@ -169,6 +170,7 @@ class TerminalInstance {
             this.socket = io(`${baseUrl}/terminal`, {
                 auth: {
                     sessionId,
+                    token: clients.getSocketToken(),
                 },
                 autoConnect: false,
                 transports: ["websocket"],
@@ -244,7 +246,7 @@ class TerminalInstance {
     };
 
     private createSession = async (baseUrl: string) => {
-        const response = await fetch(`${baseUrl}/api/session`, {
+        const response = await clients.authFetch(`${baseUrl}/api/session`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",

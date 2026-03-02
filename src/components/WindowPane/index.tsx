@@ -222,9 +222,6 @@ const WindowPane = observer(
                         instance.kind === "terminal"
                             ? `blur(${config.terminalBlur}px)`
                             : undefined,
-                    transition: isDragging
-                        ? 'none'
-                        : 'all 100ms ease-out',
                 }}
             >
                 <WindowBorder

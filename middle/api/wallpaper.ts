@@ -1,4 +1,4 @@
-import type { Application, Request } from "express";
+import type { Application, Request, RequestHandler } from "express";
 
 import multer from "multer";
 import fs from "fs";
@@ -8,6 +8,7 @@ import path from "path";
 
 type WallpaperDependencies = {
     app: Application;
+    requireControl: RequestHandler;
 };
 
 const WALLPAPER_DIR = path.join(process.cwd(), "public", "wallpapers");
@@ -57,8 +58,8 @@ const upload = multer({
     },
 });
 
-const registerWallpaperRoutes = ({ app }: WallpaperDependencies) => {
-    app.post("/api/wallpaper", upload.single("file"), (req, res) => {
+const registerWallpaperRoutes = ({ app, requireControl }: WallpaperDependencies) => {
+    app.post("/api/wallpaper", requireControl, upload.single("file"), (req, res) => {
         const file = (req as Request & { file?: Express.Multer.File }).file;
         if (!file) {
             res.status(400).json({ error: "Missing file." });

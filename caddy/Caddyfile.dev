@@ -1,0 +1,17 @@
+{
+    auto_https disable_redirects
+}
+
+https://:{$ORBIT_HTTPS_PORT} {
+    tls internal {
+        on_demand
+    }
+
+    @api path /api/*
+    reverse_proxy @api 127.0.0.1:{$ORBIT_MIDDLE_PORT}
+
+    @socket path /socket.io/*
+    reverse_proxy @socket 127.0.0.1:{$ORBIT_MIDDLE_PORT}
+
+    reverse_proxy 127.0.0.1:{$ORBIT_NEXT_PORT}
+}

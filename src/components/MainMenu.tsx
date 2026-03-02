@@ -1,25 +1,26 @@
 "use client";
 
 import { IconButton } from "@radix-ui/themes";
-import { Check, ImageUp, SlidersHorizontal } from "lucide-react";
+import { Check, ImageUp, Shield, SlidersHorizontal, Users } from "lucide-react";
 import { observer } from "mobx-react";
 import { ChromePicker, type ColorResult } from "react-color";
+import { toast } from "sonner";
 
 import {
-    DropDrawer,
-    DropDrawerContent,
-    DropDrawerGroup,
-    DropDrawerItem,
-    DropDrawerLabel,
-    DropDrawerSeparator,
-    DropDrawerSub,
-    DropDrawerSubContent,
-    DropDrawerSubTrigger,
-    DropDrawerTrigger,
-} from "@/components/ui/dropdrawer";
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import config from "state/config";
-import { windowManager } from "state";
+import { clients, windowManager } from "state";
 
 
 const toRgbaString = (color: { r: number; g: number; b: number; a?: number }) => {
@@ -31,97 +32,121 @@ const toRgbaString = (color: { r: number; g: number; b: number; a?: number }) =>
 };
 
 const MainMenu = observer(() => (
-    <nav className='fixed top-0 right-0 z-50'>
-        <DropDrawer >
-            <DropDrawerTrigger asChild>
+    <nav className="fixed top-5 right-5 z-50">
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
                 <IconButton variant="soft" aria-label="Open options">
                     <SlidersHorizontal size={16} />
                 </IconButton>
-            </DropDrawerTrigger>
-            <DropDrawerContent className="min-w-[220px]">
-                <DropDrawerLabel>Options</DropDrawerLabel>
-                <DropDrawerSeparator />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="min-w-[220px]">
                 <NewMenu />
+                <DevicesMenu />
                 <WallpaperMenu />
                 <TerminalMenu />
                 <LayoutMenu />
-                <DropDrawerItem
-                    icon={config.showTitleBar ? <Check size={14} /> : null}
+                <DropdownMenuItem
                     onSelect={(event) => {
                         event.preventDefault();
                         config.toggleTitleBar();
                     }}
                 >
-                Title Bars
-                </DropDrawerItem>
-            </DropDrawerContent>
-        </DropDrawer>
+                    {config.showTitleBar ? <Check size={14} /> : null}
+                    Title Bars
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
     </nav>
 ));
 
 const WallpaperMenu = observer(() => (
-    <DropDrawerSub>
-        <DropDrawerSubTrigger>Wallpaper</DropDrawerSubTrigger>
-        <DropDrawerSubContent>
+    <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Wallpaper</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
             {config.wallpapers.map((wallpaper) => (
-                <DropDrawerItem
+                <DropdownMenuItem
                     key={wallpaper.id}
-                    icon={
-                        wallpaper.id === config.wallpaper.value ? (
-                            <Check size={14} />
-                        ) : null
-                    }
                     onSelect={() => config.setWallpaperById(wallpaper.id)}
                 >
+                    {wallpaper.id === config.wallpaper.value ? <Check size={14} /> : null}
                     {wallpaper.label}
-                </DropDrawerItem>
+                </DropdownMenuItem>
             ))}
-            <DropDrawerSeparator />
+            <DropdownMenuSeparator />
 
-            <DropDrawerItem
-                icon={<ImageUp size={14} />}
+            <DropdownMenuItem
                 onSelect={(event) => {
                     event.preventDefault();
                     config.selectWallpaperFile();
                 }}
             >
+                <ImageUp size={14} />
                 Upload Wallpaper
-            </DropDrawerItem>
-        </DropDrawerSubContent>
-    </DropDrawerSub>
+            </DropdownMenuItem>
+        </DropdownMenuSubContent>
+    </DropdownMenuSub>
 ));
 
 const NewMenu = observer(() => (
-    <DropDrawerSub>
-        <DropDrawerSubTrigger>New</DropDrawerSubTrigger>
-        <DropDrawerSubContent>
-            <DropDrawerItem
+    <DropdownMenuSub>
+        <DropdownMenuSubTrigger>New</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+            <DropdownMenuItem
                 onSelect={(event) => {
                     event.preventDefault();
                     windowManager.createTerminalWindow();
                 }}
             >
                 Terminal
-            </DropDrawerItem>
-            <DropDrawerItem
+            </DropdownMenuItem>
+            <DropdownMenuItem
                 onSelect={(event) => {
                     event.preventDefault();
                     windowManager.createBrowserWindow();
                 }}
             >
                 Browser
-            </DropDrawerItem>
-        </DropDrawerSubContent>
-    </DropDrawerSub>
+            </DropdownMenuItem>
+        </DropdownMenuSubContent>
+    </DropdownMenuSub>
+));
+
+const DevicesMenu = observer(() => (
+    <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Devices</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+            <DropdownMenuItem
+                onSelect={(event) => {
+                    event.preventDefault();
+                    clients.setApprovalDialogOpen(true);
+                }}
+            >
+                <Users size={14} />
+                Manage Devices
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                onSelect={async (event) => {
+                    event.preventDefault();
+                    const payload = await clients.openPairingDialog("control");
+                    if (!payload?.pairingUrl) {
+                        toast.error("Failed to create pairing link.");
+                    }
+                }}
+            >
+                <Shield size={14} />
+                Add Device
+            </DropdownMenuItem>
+        </DropdownMenuSubContent>
+    </DropdownMenuSub>
 ));
 
 const TerminalMenu = observer(() => (
-    <DropDrawerSub>
-        <DropDrawerSubTrigger>Terminal</DropDrawerSubTrigger>
-        <DropDrawerSubContent>
-            <DropDrawerGroup>
+    <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Terminal</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+            <DropdownMenuGroup>
                 <div className="px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         Padding
                     </div>
                     <div className="mt-3">
@@ -137,16 +162,16 @@ const TerminalMenu = observer(() => (
                                 }
                             }}
                         />
-                        <div className="mt-2 text-xs text-white/50">
+                        <div className="mt-2 text-xs text-muted-foreground">
                             {config.terminalPadding}px
                         </div>
                     </div>
                 </div>
-            </DropDrawerGroup>
+            </DropdownMenuGroup>
 
-            <DropDrawerGroup>
+            <DropdownMenuGroup>
                 <div className="px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         Opacity
                     </div>
                     <div className="mt-3">
@@ -162,19 +187,19 @@ const TerminalMenu = observer(() => (
                                 }
                             }}
                         />
-                        <div className="mt-2 text-xs text-white/50">
+                        <div className="mt-2 text-xs text-muted-foreground">
                             {Math.round(config.terminalOpacity * 100)}%
                         </div>
                     </div>
                 </div>
-            </DropDrawerGroup>
+            </DropdownMenuGroup>
 
-            <DropDrawerSub>
-                <DropDrawerSubTrigger>Terminal Color</DropDrawerSubTrigger>
-                <DropDrawerSubContent>
-                    <DropDrawerGroup>
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Terminal Color</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                    <DropdownMenuGroup>
                         <div className="px-4 py-3">
-                            <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                                 Terminal Color
                             </div>
                             <div className="mt-3">
@@ -186,16 +211,16 @@ const TerminalMenu = observer(() => (
                                 />
                             </div>
                         </div>
-                    </DropDrawerGroup>
-                </DropDrawerSubContent>
-            </DropDrawerSub>
+                    </DropdownMenuGroup>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
-            <DropDrawerSub>
-                <DropDrawerSubTrigger>Font</DropDrawerSubTrigger>
-                <DropDrawerSubContent>
-                    <DropDrawerGroup>
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Font</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                    <DropdownMenuGroup>
                         <div className="px-4 py-3">
-                            <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                                 Font Size
                             </div>
                             <div className="mt-3">
@@ -211,39 +236,35 @@ const TerminalMenu = observer(() => (
                                         }
                                     }}
                                 />
-                                <div className="mt-2 text-xs text-white/50">
+                                <div className="mt-2 text-xs text-muted-foreground">
                                     {config.terminalFontSize}px
                                 </div>
                             </div>
                         </div>
-                    </DropDrawerGroup>
+                    </DropdownMenuGroup>
 
                     {config.terminalFonts.map((font) => (
-                        <DropDrawerItem
+                        <DropdownMenuItem
                             key={font.id}
-                            icon={
-                                config.terminalFontFamily === font.value ? (
-                                    <Check size={14} />
-                                ) : null
-                            }
                             onSelect={() => config.setTerminalFontFamily(font.value)}
                         >
+                            {config.terminalFontFamily === font.value ? <Check size={14} /> : null}
                             {font.label}
-                        </DropDrawerItem>
+                        </DropdownMenuItem>
                     ))}
-                </DropDrawerSubContent>
-            </DropDrawerSub>
-        </DropDrawerSubContent>
-    </DropDrawerSub>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
+        </DropdownMenuSubContent>
+    </DropdownMenuSub>
 ));
 
 const LayoutMenu = observer(() => (
-    <DropDrawerSub>
-        <DropDrawerSubTrigger>Layout</DropDrawerSubTrigger>
-        <DropDrawerSubContent>
-            <DropDrawerGroup>
+    <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Layout</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+            <DropdownMenuGroup>
                 <div className="px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         Gap
                     </div>
                     <div className="mt-3">
@@ -259,16 +280,16 @@ const LayoutMenu = observer(() => (
                                 }
                             }}
                         />
-                        <div className="mt-2 text-xs text-white/50">
+                        <div className="mt-2 text-xs text-muted-foreground">
                             {config.gap}px
                         </div>
                     </div>
                 </div>
-            </DropDrawerGroup>
+            </DropdownMenuGroup>
 
-            <DropDrawerGroup>
+            <DropdownMenuGroup>
                 <div className="px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         Border Width
                     </div>
                     <div className="mt-3">
@@ -284,16 +305,16 @@ const LayoutMenu = observer(() => (
                                 }
                             }}
                         />
-                        <div className="mt-2 text-xs text-white/50">
+                        <div className="mt-2 text-xs text-muted-foreground">
                             {config.borderWidth}
                         </div>
                     </div>
                 </div>
-            </DropDrawerGroup>
+            </DropdownMenuGroup>
 
-            <DropDrawerGroup>
+            <DropdownMenuGroup>
                 <div className="px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         Border Radius
                     </div>
                     <div className="mt-3">
@@ -309,19 +330,19 @@ const LayoutMenu = observer(() => (
                                 }
                             }}
                         />
-                        <div className="mt-2 text-xs text-white/50">
+                        <div className="mt-2 text-xs text-muted-foreground">
                             {config.borderRadius}px
                         </div>
                     </div>
                 </div>
-            </DropDrawerGroup>
+            </DropdownMenuGroup>
 
-            <DropDrawerSub>
-                <DropDrawerSubTrigger>Border Color</DropDrawerSubTrigger>
-                <DropDrawerSubContent>
-                    <DropDrawerGroup>
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Border Color</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                    <DropdownMenuGroup>
                         <div className="px-4 py-3">
-                            <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                                 Border Color
                             </div>
                             <div className="mt-3">
@@ -333,16 +354,16 @@ const LayoutMenu = observer(() => (
                                 />
                             </div>
                         </div>
-                    </DropDrawerGroup>
-                </DropDrawerSubContent>
-            </DropDrawerSub>
+                    </DropdownMenuGroup>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
-            <DropDrawerSub>
-                <DropDrawerSubTrigger>Active Border</DropDrawerSubTrigger>
-                <DropDrawerSubContent>
-                    <DropDrawerGroup>
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Active Border</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                    <DropdownMenuGroup>
                         <div className="px-4 py-3">
-                            <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                                 Active Border
                             </div>
                             <div className="mt-3">
@@ -354,13 +375,13 @@ const LayoutMenu = observer(() => (
                                 />
                             </div>
                         </div>
-                    </DropDrawerGroup>
-                </DropDrawerSubContent>
-            </DropDrawerSub>
+                    </DropdownMenuGroup>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
-            <DropDrawerGroup>
+            <DropdownMenuGroup>
                 <div className="px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         Shadow Blur
                     </div>
                     <div className="mt-3">
@@ -376,16 +397,16 @@ const LayoutMenu = observer(() => (
                                 }
                             }}
                         />
-                        <div className="mt-2 text-xs text-white/50">
+                        <div className="mt-2 text-xs text-muted-foreground">
                             {config.shadowBlur}px
                         </div>
                     </div>
                 </div>
-            </DropDrawerGroup>
+            </DropdownMenuGroup>
 
-            <DropDrawerGroup>
+            <DropdownMenuGroup>
                 <div className="px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.2em] text-white/60">
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         Shadow Spread
                     </div>
                     <div className="mt-3">
@@ -401,14 +422,14 @@ const LayoutMenu = observer(() => (
                                 }
                             }}
                         />
-                        <div className="mt-2 text-xs text-white/50">
+                        <div className="mt-2 text-xs text-muted-foreground">
                             {config.shadowAmount}px
                         </div>
                     </div>
                 </div>
-            </DropDrawerGroup>
-        </DropDrawerSubContent>
-    </DropDrawerSub>
+            </DropdownMenuGroup>
+        </DropdownMenuSubContent>
+    </DropdownMenuSub>
 ));
 
 export default MainMenu;

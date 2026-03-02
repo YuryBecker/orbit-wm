@@ -2,6 +2,8 @@ import type { IPty } from "node-pty";
 
 import type { Namespace, Server } from "socket.io";
 
+import type { AuthPrincipal } from "./auth";
+
 
 
 type Session = {
@@ -17,6 +19,19 @@ type TerminalNamespace = {
 };
 
 type SessionResolver = (sessionId: string) => Session | null;
+type AuthResolver = (options: {
+    token: string | null;
+    ip: string | null;
+    userAgent: string | null;
+}) => {
+    principal: AuthPrincipal | null;
+    reason: string | null;
+};
+
+type SocketDependencies = {
+    resolvePrincipal: AuthResolver;
+    getBearerToken: (header: string | undefined | null) => string | null;
+};
 
 type OutputBuffer = {
     chunks: string[];
@@ -97,17 +112,61 @@ const readBuffer = (
     return buffer.chunks.slice(buffer.start).join("");
 };
 
+const getSocketIp = (
+    headers: Record<string, string | string[] | undefined>,
+    address: string | undefined,
+) => {
+    const forwarded = headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.trim()) {
+        return forwarded.split(",")[0]?.trim() || null;
+    }
+
+    if (Array.isArray(forwarded) && forwarded.length > 0) {
+        return forwarded[0]?.split(",")[0]?.trim() || null;
+    }
+
+    return address || null;
+};
+
 /* ---- Namespace Factory ---- */
 const createTerminalNamespace = (
     io: Server,
     sessions: Map<string, Session>,
     getSession: SessionResolver,
+    auth: SocketDependencies,
 ): TerminalNamespace => {
     const namespace = io.of("/terminal");
     const outputBuffers = new Map<string, OutputBuffer>();
 
     /* ---- Auth ---- */
     namespace.use((socket, next) => {
+        const headerToken = auth.getBearerToken(
+            typeof socket.handshake.headers.authorization === "string"
+                ? socket.handshake.headers.authorization
+                : null,
+        );
+        const token =
+            (typeof socket.handshake.auth?.token === "string"
+                ? socket.handshake.auth.token
+                : null) ||
+            (typeof socket.handshake.query?.token === "string"
+                ? socket.handshake.query.token
+                : null) ||
+            headerToken;
+        const userAgent =
+            typeof socket.handshake.headers["user-agent"] === "string"
+                ? socket.handshake.headers["user-agent"]
+                : null;
+        const resolved = auth.resolvePrincipal({
+            token,
+            ip: getSocketIp(socket.handshake.headers, socket.handshake.address),
+            userAgent,
+        });
+        if (!resolved.principal) {
+            next(new Error("Unauthorized."));
+            return;
+        }
+
         const sessionId =
             socket.handshake.auth?.sessionId ||
             socket.handshake.query?.sessionId;
@@ -124,12 +183,15 @@ const createTerminalNamespace = (
         }
 
         socket.data.sessionId = sessionId;
+        socket.data.authPrincipal = resolved.principal;
         next();
     });
 
     /* ---- Event Wiring ---- */
     namespace.on("connection", (socket) => {
         const sessionId: string = socket.data.sessionId;
+        const principal = socket.data.authPrincipal as AuthPrincipal;
+        const isReadonly = principal?.isReadonly === true;
 
         const session = getSession(sessionId);
         if (!session) {
@@ -150,6 +212,10 @@ const createTerminalNamespace = (
         }
 
         socket.on("input", (payload) => {
+            if (isReadonly) {
+                return;
+            }
+
             if (!payload || payload.sessionId !== sessionId) {
                 return;
             }
@@ -157,6 +223,10 @@ const createTerminalNamespace = (
         });
 
         socket.on("resize", (payload) => {
+            if (isReadonly) {
+                return;
+            }
+
             if (!payload || payload.sessionId !== sessionId) {
                 return;
             }

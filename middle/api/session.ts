@@ -1,7 +1,9 @@
 import type Database from "better-sqlite3";
-import type { Application } from "express";
+import type { Application, Request, RequestHandler } from "express";
 import type { IPty } from "node-pty";
 import crypto from "crypto";
+
+import type { AuthPrincipal } from "../auth";
 
 
 
@@ -25,6 +27,9 @@ type SessionDependencies = {
     app: Application;
     db: Database.Database;
     sessions: Map<string, Session>;
+    requireAuth: RequestHandler;
+    requireControl: RequestHandler;
+    getPrincipal: (req: Request) => AuthPrincipal | null;
     attachPty: (sessionId: string, pty: IPty) => void;
     ensureTmuxSession: (sessionId: string) => void;
     spawnPty: (sessionId: string) => IPty;
@@ -119,9 +124,15 @@ const destroySession = (
 
 /* ---- Routes ---- */
 const registerSessionRoutes = (dependencies: SessionDependencies) => {
-    const { app, db } = dependencies;
+    const {
+        app,
+        db,
+        requireAuth,
+        requireControl,
+        getPrincipal,
+    } = dependencies;
 
-    app.post("/api/session", (req, res) => {
+    app.post("/api/session", requireControl, (req, res) => {
         const session = createSession(dependencies, req.body?.name, req.body?.data);
         const row = db
             .prepare(
@@ -138,7 +149,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
         });
     });
 
-    app.get(["/api/sessions", "/api/sessions/"], (_req, res) => {
+    app.get(["/api/sessions", "/api/sessions/"], requireAuth, (_req, res) => {
         const rows = db
             .prepare(
                 "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions",
@@ -147,7 +158,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
         res.json({ sessions: rows.map(serializeSessionRow) });
     });
 
-    app.get("/api/session/:id", (req, res) => {
+    app.get("/api/session/:id", requireAuth, (req, res) => {
         const row = db
             .prepare(
                 "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions WHERE id = ?",
@@ -161,7 +172,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
         res.json(serializeSessionRow(row));
     });
 
-    app.patch("/api/session/:id", (req, res) => {
+    app.patch("/api/session/:id", requireControl, (req, res) => {
         const existing = db
             .prepare(
                 "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions WHERE id = ?",
@@ -222,13 +233,29 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
         res.json(serializeSessionRow(row));
     });
 
-    app.delete("/api/session/:id", (req, res) => {
+    app.delete("/api/session/:id", requireControl, (req, res) => {
         if (!destroySession(dependencies, req.params.id)) {
             res.status(404).json({ error: "Session not found." });
             return;
         }
 
         res.status(204).end();
+    });
+
+    app.get("/api/me", requireAuth, (req, res) => {
+        const principal = getPrincipal(req);
+        if (!principal) {
+            res.status(401).json({ error: "Unauthorized." });
+            return;
+        }
+
+        res.json({
+            kind: principal.kind,
+            userId: principal.userId,
+            label: principal.label,
+            scope: principal.scope,
+            isReadonly: principal.isReadonly,
+        });
     });
 };
 

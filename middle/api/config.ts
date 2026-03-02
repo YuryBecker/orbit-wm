@@ -1,4 +1,4 @@
-import type { Application } from "express";
+import type { Application, RequestHandler } from "express";
 
 import type Database from "better-sqlite3";
 
@@ -6,6 +6,8 @@ import type Database from "better-sqlite3";
 type ConfigDependencies = {
     app: Application;
     db: Database.Database;
+    requireAuth: RequestHandler;
+    requireControl: RequestHandler;
 };
 
 type ConfigRow = {
@@ -26,8 +28,8 @@ const parseValue = (value: string | null) => {
     }
 };
 
-const registerConfigRoutes = ({ app, db }: ConfigDependencies) => {
-    app.get("/api/config", (_req, res) => {
+const registerConfigRoutes = ({ app, db, requireAuth, requireControl }: ConfigDependencies) => {
+    app.get("/api/config", requireAuth, (_req, res) => {
         const rows = db
             .prepare("SELECT key, value, updatedAt FROM config")
             .all() as ConfigRow[];
@@ -40,7 +42,7 @@ const registerConfigRoutes = ({ app, db }: ConfigDependencies) => {
         res.json({ config });
     });
 
-    app.post("/api/config", (req, res) => {
+    app.post("/api/config", requireControl, (req, res) => {
         const key = typeof req.body?.key === "string" ? req.body.key : null;
         if (!key) {
             res.status(400).json({ error: "Missing key." });

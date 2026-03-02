@@ -9,8 +9,10 @@ import http from "http";
 import createTerminalNamespace from "./ws";
 import createDatabase from "./utils/db";
 import createTmuxManager from "./utils/tmux";
+import { createAuthHelpers } from "./auth";
 import {
     registerConfigRoutes,
+    registerSecurityRoutes,
     registerSessionRoutes,
     registerTerminalRoutes,
     registerWallpaperRoutes,
@@ -20,6 +22,7 @@ import type { Session, SessionDependencies } from "./api/session";
 
 /* ---- Configuration ---- */
 const PORT = Number(process.env.MIDDLE_PORT || 4001);
+const HOST = process.env.MIDDLE_HOST || "127.0.0.1";
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN;
 const allowedOrigins = CLIENT_ORIGIN
     ? CLIENT_ORIGIN.split(",").map((origin) => origin.trim())
@@ -27,6 +30,7 @@ const allowedOrigins = CLIENT_ORIGIN
 
 /* ---- Database ---- */
 const db = createDatabase();
+const auth = createAuthHelpers(db);
 
 /* ---- HTTP App ---- */
 const app = express();
@@ -49,6 +53,7 @@ app.use(
     }),
 );
 app.use(express.json());
+app.use(auth.attachPrincipal);
 
 /* ---- WebSockets ---- */
 const server = http.createServer(app);
@@ -89,7 +94,10 @@ const sessions = new Map<string, Session>();
 
 const getSession = (sessionId: string) => sessions.get(sessionId) || restoreSession(sessionId);
 
-const namespace = createTerminalNamespace(io, sessions, getSession);
+const namespace = createTerminalNamespace(io, sessions, getSession, {
+    resolvePrincipal: auth.resolvePrincipal,
+    getBearerToken: auth.getBearerToken,
+});
 
 const restoreSession = (sessionId: string) => {
     const row = db
@@ -121,6 +129,9 @@ const sessionDependencies: SessionDependencies = {
     app,
     db,
     sessions,
+    requireAuth: auth.requireAuth,
+    requireControl: auth.requireControl,
+    getPrincipal: auth.getPrincipal,
     attachPty: namespace.attachPty,
     ensureTmuxSession: tmux.ensureSession,
     spawnPty,
@@ -129,10 +140,28 @@ const sessionDependencies: SessionDependencies = {
 
 registerSessionRoutes(sessionDependencies);
 registerTerminalRoutes({ app });
-registerConfigRoutes({ app, db });
-registerWallpaperRoutes({ app });
+registerConfigRoutes({
+    app,
+    db,
+    requireAuth: auth.requireAuth,
+    requireControl: auth.requireControl,
+});
+registerWallpaperRoutes({
+    app,
+    requireControl: auth.requireControl,
+});
+registerSecurityRoutes({
+    app,
+    db,
+    requireControl: auth.requireControl,
+    getRequestIp: auth.getRequestIp,
+    createToken: auth.createToken,
+    sha256: auth.sha256,
+    randomToken: auth.randomToken,
+    now: auth.now,
+});
 
 /* ---- Server Start ---- */
-server.listen(PORT, () => {
-    console.log(`Middle layer listening on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+    console.log(`Middle layer listening on http://${HOST}:${PORT}`);
 });

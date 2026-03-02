@@ -2,6 +2,7 @@ import { toJS } from "mobx";
 
 import config from "./config";
 import browsers from "./browsers";
+import clients from "./clients";
 import terminals from "./terminals";
 import windowManager from "./window-manager";
 
@@ -11,9 +12,10 @@ if (typeof window !== 'undefined') {
     (window as any).toJS = toJS;
     (window as any).config = config;
     (window as any).browsers = browsers;
+    (window as any).clients = clients;
     (window as any).terminals = terminals;
     (window as any).windowManager = windowManager;
 }
 
 
-export { browsers, config, terminals, windowManager };
+export { browsers, clients, config, terminals, windowManager };

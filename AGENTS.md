@@ -77,3 +77,4 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 - TypeScript/TSX uses 4-space indentation and double quotes (match existing files in `src/app`).
 - Prefer PascalCase components and `camelCase` utilities.
 - Leave two blank lines after the last import before other code.
+- For `Button` components, prefer built-in props (`variant`, `size`, etc.) instead of ad-hoc Tailwind class strings. Only use custom button classes when absolutely necessary.

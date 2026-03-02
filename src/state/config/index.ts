@@ -1,5 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
+import clients from "../clients";
 import { getMiddleBaseUrl } from "../baseUrl";
 
 
@@ -366,7 +367,7 @@ class ConfigStore {
     };
 
     public fetchConfig = async () => {
-        const response = await fetch(`${this.baseUrl}/api/config`);
+        const response = await clients.authFetch(`${this.baseUrl}/api/config`);
         if (!response.ok) {
             return null;
         }
@@ -453,7 +454,7 @@ class ConfigStore {
 
         this.saveTimers[key] = setTimeout(() => {
             delete this.saveTimers[key];
-            fetch(`${this.baseUrl}/api/config`, {
+            clients.authFetch(`${this.baseUrl}/api/config`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -496,7 +497,7 @@ class ConfigStore {
         const formData = new FormData();
         formData.append("file", file);
 
-        const response = await fetch(`${this.baseUrl}/api/wallpaper`, {
+        const response = await clients.authFetch(`${this.baseUrl}/api/wallpaper`, {
             method: "POST",
             body: formData,
         });
