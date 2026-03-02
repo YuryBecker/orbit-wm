@@ -1,6 +1,6 @@
 # Orbit Window Manager (Orbit WM)
 
-[`demo.gif`](public/demo.gif)
+![Orbit WM demo](public/demo.gif)
 
 ![Orbit WM screenshot](public/example.jpeg)
 
