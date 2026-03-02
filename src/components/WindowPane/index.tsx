@@ -7,11 +7,13 @@ import { motion } from "framer-motion";
 
 import config from "state/config";
 import { windowManager } from "state";
+import type { ResizeContext, ResizeEdge } from "state/window-manager";
 import WindowPaneInstance from "state/window-manager/instance";
 
 import Browser from "../Browser";
 import Terminal from "../Terminal";
 import TitleBar from "./TitleBar";
+import WindowBorder from "./WindowBorder";
 
 
 
@@ -32,6 +34,7 @@ const WindowPane = observer(
         dragOffset,
     }: WindowPaneProps) => {
         const containerRef = useRef<HTMLDivElement | null>(null);
+        const resizeRef = useRef<ResizeContext | null>(null);
         const id = useId();
         const isDragging = activeDragId === instance.id;
 
@@ -76,6 +79,90 @@ const WindowPane = observer(
         const dragX = isDragging && dragOffset ? dragOffset.x : 0;
         const dragY = isDragging && dragOffset ? dragOffset.y : 0;
 
+        const handleStartResize = (
+            instanceId: string,
+            edge: ResizeEdge,
+            event: MouseEvent<HTMLDivElement>,
+        ) => {
+            const isModKeyDown = event.ctrlKey || event.metaKey;
+
+            if (event.button !== 0 && !(event.button === 2 && isModKeyDown)) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const context = windowManager.beginResize(
+                instanceId,
+                edge,
+                event.clientX,
+                event.clientY,
+            );
+            if (!context) {
+                return;
+            }
+
+            resizeRef.current = context;
+
+            const handleMouseUp = () => {
+                resizeRef.current = null;
+                window.removeEventListener("mouseup", handleMouseUp);
+                window.removeEventListener("mousemove", handleMouseMove);
+                windowManager.endResize();
+            };
+
+            const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+                if (!resizeRef.current) {
+                    return;
+                }
+
+                windowManager.updateResize(
+                    resizeRef.current,
+                    moveEvent.clientX,
+                    moveEvent.clientY,
+                );
+            };
+
+            window.addEventListener("mouseup", handleMouseUp);
+            window.addEventListener("mousemove", handleMouseMove);
+        };
+
+        const handleModRightClickResize = (
+            event: MouseEvent<HTMLDivElement>,
+        ) => {
+            const isModKeyDown = event.ctrlKey || event.metaKey;
+            if (!isModKeyDown || event.button !== 2) {
+                return;
+            }
+
+            const rect = event.currentTarget.getBoundingClientRect();
+            const localX = event.clientX - rect.left;
+            const localY = event.clientY - rect.top;
+
+            const distanceToLeft = localX;
+            const distanceToRight = rect.width - localX;
+            const distanceToTop = localY;
+            const distanceToBottom = rect.height - localY;
+
+            let edge: ResizeEdge = "right";
+            let best = distanceToRight;
+
+            if (distanceToLeft < best) {
+                best = distanceToLeft;
+                edge = "left";
+            }
+            if (distanceToTop < best) {
+                best = distanceToTop;
+                edge = "top";
+            }
+            if (distanceToBottom < best) {
+                edge = "bottom";
+            }
+
+            handleStartResize(instance.id, edge, event);
+        };
+
         return (
             <motion.div
                 className={`absolute flex flex-col overflow-hidden bg-black text-white ${
@@ -89,11 +176,18 @@ const WindowPane = observer(
                     windowManager.setActive(instance.id);
                 }}
                 onMouseDown={(event) => {
+                    handleModRightClickResize(event);
+
                     if (!event.ctrlKey || event.button !== 0) {
                         return;
                     }
 
                     onStartDrag?.(instance.id, event);
+                }}
+                onContextMenu={(event) => {
+                    if (event.ctrlKey || event.metaKey) {
+                        event.preventDefault();
+                    }
                 }}
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{
@@ -133,6 +227,10 @@ const WindowPane = observer(
                         : 'all 100ms ease-out',
                 }}
             >
+                <WindowBorder
+                    instance={instance}
+                    onStartResize={handleStartResize}
+                />
                 {config.showTitleBar ? (
                     <TitleBar
                         instance={instance}

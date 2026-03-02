@@ -584,6 +584,86 @@ export class WindowManager {
         void this.save();
     };
 
+    /** Start resizing a window edge by adjusting the nearest split boundary. */
+    public beginResize = (
+        windowId: string,
+        edge: ResizeEdge,
+        clientX: number,
+        clientY: number,
+    ): ResizeContext | null => {
+        const leaf = this.findNodeByWindowId(windowId);
+        if (!leaf) {
+            return null;
+        }
+
+        const target = this.findResizeSplitNode(leaf, edge);
+        if (!target) {
+            return null;
+        }
+
+        return {
+            node: target,
+            edge,
+            startX: clientX,
+            startY: clientY,
+            startRatio: target.splitRatio,
+            box: { ...target.box },
+        };
+    };
+
+    /** Apply a resize update based on the current pointer position. */
+    public updateResize = (
+        context: ResizeContext,
+        clientX: number,
+        clientY: number,
+    ) => {
+        const node = context.node;
+        const minBoxSize = this.getMinBoxSize();
+
+        if (node.splitTop) {
+            if (context.box.height <= 0) {
+                return;
+            }
+
+            const originalFirstSize =
+                (context.box.height / 2) * context.startRatio;
+            const deltaY = clientY - context.startY;
+            const nextFirstSize = this.clampSize(
+                originalFirstSize + deltaY,
+                minBoxSize,
+                context.box.height - minBoxSize,
+            );
+
+            node.splitRatio = this.clampSplitRatio(
+                (nextFirstSize * 2) / context.box.height,
+            );
+        } else {
+            if (context.box.width <= 0) {
+                return;
+            }
+
+            const originalFirstSize =
+                (context.box.width / 2) * context.startRatio;
+            const deltaX = clientX - context.startX;
+            const nextFirstSize = this.clampSize(
+                originalFirstSize + deltaX,
+                minBoxSize,
+                context.box.width - minBoxSize,
+            );
+
+            node.splitRatio = this.clampSplitRatio(
+                (nextFirstSize * 2) / context.box.width,
+            );
+        }
+
+        this.recalculate();
+    };
+
+    /** Finalize resize and persist layout. */
+    public endResize = () => {
+        void this.save();
+    };
+
     /** Arrange windows into a fixed grid for temporary layout verification. */
     public arrangeGrid = (rows: number, columns: number) => {
         if (rows <= 0 || columns <= 0) {
@@ -772,6 +852,43 @@ export class WindowManager {
 
         return internal;
     };
+
+    /** Find the closest split node whose boundary corresponds to the requested edge. */
+    private findResizeSplitNode = (
+        leaf: WindowNode,
+        edge: ResizeEdge,
+    ): WindowNode | null => {
+        let current: WindowNode | null = leaf;
+
+        while (current && current.parent) {
+            const parentNode: WindowNode = current.parent as WindowNode;
+            const isFirst = parentNode.children[0] === current;
+            const isSecond = parentNode.children[1] === current;
+
+            if (edge === "right" && !parentNode.splitTop && isFirst) {
+                return parentNode;
+            }
+            if (edge === "left" && !parentNode.splitTop && isSecond) {
+                return parentNode;
+            }
+            if (edge === "bottom" && parentNode.splitTop && isFirst) {
+                return parentNode;
+            }
+            if (edge === "top" && parentNode.splitTop && isSecond) {
+                return parentNode;
+            }
+
+            current = parentNode;
+        }
+
+        return null;
+    };
+
+    /** Minimum pane size in layout coordinates (accounts for the configured gap). */
+    private getMinBoxSize = () => MIN_WINDOW_INNER_SIZE_PX + config.gap;
+
+    private clampSize = (value: number, min: number, max: number) =>
+        Math.min(max, Math.max(min, value));
 
     /** Insert a new window node using the Hyprland dwindle split rules. */
     private insertNode = (
@@ -998,6 +1115,21 @@ type SerializedLayoutNode =
         splitRatio: number;
         children: [SerializedLayoutNode, SerializedLayoutNode];
     };
+
+type ResizeEdge = "left" | "right" | "top" | "bottom";
+
+type ResizeContext = {
+    node: WindowNode;
+    edge: ResizeEdge;
+    startX: number;
+    startY: number;
+    startRatio: number;
+    box: Rect;
+};
+
+const MIN_WINDOW_INNER_SIZE_PX = 160;
+
+export type { ResizeContext, ResizeEdge };
 
 
 export default new WindowManager();
