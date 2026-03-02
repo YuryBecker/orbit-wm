@@ -40,6 +40,9 @@ export class WindowManager {
 
     public size = { width: 1024, height: 1024 };
 
+    /** Prevent persistence writes during hydration. */
+    private suppressSave = false;
+
 
     /* ---- Computed ---- */
     /** Base URL for the middle layer. */
@@ -76,7 +79,16 @@ export class WindowManager {
             sessionId: instance.sessionId,
             kind: instance.kind,
             url: instance.url,
+            x: instance.x,
+            y: instance.y,
+            width: instance.width,
+            height: instance.height,
         }));
+
+        const indexById = new Map<string, number>();
+        this.all.forEach((instance, index) => {
+            indexById.set(instance.id, index);
+        });
 
         const activeIndex = this.activeId
             ? this.all.findIndex((instance) => instance.id === this.activeId)
@@ -85,6 +97,7 @@ export class WindowManager {
         return {
             windows,
             activeIndex: activeIndex >= 0 ? activeIndex : undefined,
+            layout: this.serializeLayoutNode(this.root, indexById) ?? undefined,
         };
     }
 
@@ -101,6 +114,7 @@ export class WindowManager {
             return null;
         }
 
+        this.sessionId = sessionId;
         this.hydrateFromSession(payload?.data, sessionId);
         return payload;
     };
@@ -164,8 +178,8 @@ export class WindowManager {
                 globalThis.localStorage?.setItem("orbitSessionId", createdId);
             }
 
-            this.hydrateFromSession(payload?.data, createdId);
             this.sessionId = createdId;
+            this.hydrateFromSession(payload?.data, createdId);
 
             return createdId;
         } catch {
@@ -232,6 +246,7 @@ export class WindowManager {
         openingId?: string | null;
         kind?: "terminal" | "browser";
         url?: string;
+        shouldSave?: boolean;
     }) => {
         const instance = new WindowPaneInstance(
             options.title,
@@ -255,7 +270,9 @@ export class WindowManager {
         this.setActive(instance.id);
 
         // Save layout:
-        this.save();
+        if (options.shouldSave !== false) {
+            void this.save();
+        }
 
         return instance;
     };
@@ -268,11 +285,17 @@ export class WindowManager {
                 sessionId?: string | null;
                 kind?: "terminal" | "browser";
                 url?: string;
+                x?: number;
+                y?: number;
+                width?: number;
+                height?: number;
             }[];
             activeIndex?: number;
+            layout?: SerializedLayoutNode | null;
         } | null,
         fallbackSessionId: string | null,
     ) => {
+        this.suppressSave = true;
         this.reset();
 
         const hasStoredWindows = Array.isArray(data?.windows);
@@ -289,12 +312,47 @@ export class WindowManager {
             });
         }
 
+        const canHydrateLayout =
+            windows.length > 0 &&
+            data?.layout !== undefined &&
+            data?.layout !== null;
+
+        if (canHydrateLayout) {
+            const created = windows.map((window) =>
+                this.createInstanceFromSerializedWindow(window, fallbackSessionId),
+            );
+
+            const root = this.hydrateLayoutNode(data?.layout ?? null, created);
+            if (root) {
+                this.root = root;
+                this.recalculate();
+
+                if (
+                    typeof data?.activeIndex === "number" &&
+                    data.activeIndex >= 0 &&
+                    data.activeIndex < created.length
+                ) {
+                    this.activeId = created[data.activeIndex].id;
+                }
+
+                this.suppressSave = false;
+                return;
+            }
+
+            this.reset();
+        }
+
         windows.forEach((window) => {
+            const kind = window.kind ?? "terminal";
             this.add({
                 title: window.title ?? "Terminal",
-                sessionId: window.sessionId ?? fallbackSessionId,
-                kind: window.kind ?? "terminal",
+                sessionId:
+                    kind === "terminal"
+                        ? (window.sessionId ?? fallbackSessionId)
+                        : null,
+                kind,
                 url: window.url,
+                shouldSave: false,
             });
         });
 
@@ -304,6 +362,12 @@ export class WindowManager {
             data.activeIndex < this.all.length
         ) {
             this.activeId = this.all[data.activeIndex].id;
+        }
+
+        this.suppressSave = false;
+
+        if (data?.layout === undefined || data?.layout === null) {
+            void this.save();
         }
     };
 
@@ -328,7 +392,7 @@ export class WindowManager {
         }
 
         // Save layout:
-        this.save();
+        void this.save();
     };
 
     /** Set the active window id if it exists. */
@@ -484,6 +548,7 @@ export class WindowManager {
 
         node.parent.splitTop = !node.parent.splitTop;
         this.recalculate();
+        void this.save();
     };
 
     /** Swap the window with its sibling within the parent split. */
@@ -496,6 +561,7 @@ export class WindowManager {
         const parent = node.parent;
         parent.children = [parent.children[1], parent.children[0]];
         this.recalculate();
+        void this.save();
     };
 
     /** Swap two windows in the layout tree. */
@@ -515,6 +581,7 @@ export class WindowManager {
         secondNode.window = temp;
 
         this.recalculate();
+        void this.save();
     };
 
     /** Arrange windows into a fixed grid for temporary layout verification. */
@@ -561,6 +628,10 @@ export class WindowManager {
 
     /** Update session . */
     public save = async () => {
+        if (!this.sessionId || this.suppressSave) {
+            return;
+        }
+
         await fetch(`${this.baseUrl}/api/session/${this.sessionId}`, {
             method: "PATCH",
             headers: {
@@ -603,6 +674,103 @@ export class WindowManager {
         this.instances = DEFAULTS.instances;
         this.activeId = DEFAULTS.activeId;
         this.root = null;
+    };
+
+    /** Create and register an instance from persisted window data. */
+    private createInstanceFromSerializedWindow = (
+        window: {
+            title?: string;
+            sessionId?: string | null;
+            kind?: "terminal" | "browser";
+            url?: string;
+        },
+        fallbackSessionId: string | null,
+    ) => {
+        const kind = window.kind ?? "terminal";
+        const instance = new WindowPaneInstance(
+            window.title ?? "Terminal",
+            kind,
+            this,
+        );
+
+        instance.sessionId =
+            kind === "terminal"
+                ? (window.sessionId ?? fallbackSessionId)
+                : null;
+        instance.url = window.url ?? "";
+
+        this.instances = {
+            ...this.instances,
+            [instance.id]: instance,
+        };
+
+        return instance;
+    };
+
+    /** Serialize the current layout tree for persistence. */
+    private serializeLayoutNode = (
+        node: WindowNode | null,
+        indexById: Map<string, number>,
+    ): SerializedLayoutNode | null => {
+        if (!node) {
+            return null;
+        }
+
+        if (node.window) {
+            const index = indexById.get(node.window.id);
+            if (typeof index !== "number") {
+                return null;
+            }
+
+            return { windowIndex: index };
+        }
+
+        const first = this.serializeLayoutNode(node.children[0], indexById);
+        const second = this.serializeLayoutNode(node.children[1], indexById);
+        if (!first || !second) {
+            return null;
+        }
+
+        return {
+            splitTop: node.splitTop,
+            splitRatio: node.splitRatio,
+            children: [first, second],
+        };
+    };
+
+    /** Hydrate a layout tree from persisted data. */
+    private hydrateLayoutNode = (
+        node: SerializedLayoutNode | null,
+        windows: WindowPaneInstance[],
+    ): WindowNode | null => {
+        if (!node) {
+            return null;
+        }
+
+        if ("windowIndex" in node) {
+            const window = windows[node.windowIndex];
+            if (!window) {
+                return null;
+            }
+
+            return new WindowNode(window);
+        }
+
+        const childA = this.hydrateLayoutNode(node.children[0], windows);
+        const childB = this.hydrateLayoutNode(node.children[1], windows);
+        if (!childA || !childB) {
+            return null;
+        }
+
+        const internal = new WindowNode();
+        internal.isNode = true;
+        internal.splitTop = node.splitTop;
+        internal.splitRatio = node.splitRatio;
+        internal.children = [childA, childB];
+        childA.parent = internal;
+        childB.parent = internal;
+
+        return internal;
     };
 
     /** Insert a new window node using the Hyprland dwindle split rules. */
@@ -822,6 +990,14 @@ const DEFAULTS = {
 };
 
 type Direction = "left" | "right" | "up" | "down";
+
+type SerializedLayoutNode =
+    | { windowIndex: number }
+    | {
+        splitTop: boolean;
+        splitRatio: number;
+        children: [SerializedLayoutNode, SerializedLayoutNode];
+    };
 
 
 export default new WindowManager();
