@@ -4,13 +4,14 @@
 
 Orbit WM is a **browser-based tiling window manager** for terminals (and local dev browser windows).
 
-It turns any browser (tablet, TV, spare laptop, iPad) into a tiled terminal “desktop”.  
-You get multiple terminals and dashboards on one screen, layouts that come back after a restart, and a setup that looks and feels like a real window manager—without installing a full Linux desktop or giving everyone SSH access.
+It turns any browser (tablet, TV, spare laptop, iPad) into a tiled terminal “desktop”.
+You get multiple terminals and dashboards on one screen, layouts that come back after a restart, and a setup that looks and feels like a real window manager without installing a full Linux desktop or giving everyone SSH access.
 
 **TL;DR, Orbit WM is useful if you:**
 - Run a lot of terminals and dashboards
 - Like tiling window managers (Hyprland-style)
 - Want this to “just work” in any modern browser
+
 
 ## Why would you use this?
 
@@ -37,7 +38,7 @@ You get multiple terminals and dashboards on one screen, layouts that come back 
 - **Looks good by default**: wallpapers, gaps, borders, and terminal theming built in.
 - **Keyboard-first**: fast navigation and swapping without touching the mouse.
 
-It’s designed for “desktop-like” multi-window workflows inside a single web page:
+**It’s designed for “desktop-like” multi-window workflows inside a single web page:**
 - Multi-terminal dev workflows in a single browser window
 - Live dashboards for logs/metrics on a shared screen
 - Persistent workspaces that reopen as you left them (layout + session metadata)

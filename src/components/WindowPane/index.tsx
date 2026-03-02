@@ -19,7 +19,7 @@ type WindowPaneProps = {
     instance: WindowPaneInstance;
     onStartDrag?: (id: string, event: MouseEvent<HTMLDivElement>) => void;
     activeDragId?: string | null;
-    isCtrlDown?: boolean;
+    isModKeyDown?: boolean;
     dragOffset?: { x: number; y: number };
 };
 
@@ -28,7 +28,7 @@ const WindowPane = observer(
         instance,
         onStartDrag,
         activeDragId,
-        isCtrlDown,
+        isModKeyDown: isCtrlDown,
         dragOffset,
     }: WindowPaneProps) => {
         const containerRef = useRef<HTMLDivElement | null>(null);

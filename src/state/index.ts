@@ -1,8 +1,9 @@
 import { toJS } from "mobx";
+
 import config from "./config";
-import { browsers } from "./browsers";
-import { terminals } from "./terminals";
-import { windowManager } from "./window-manager";
+import browsers from "./browsers";
+import terminals from "./terminals";
+import windowManager from "./window-manager";
 
 
 // For debugging:

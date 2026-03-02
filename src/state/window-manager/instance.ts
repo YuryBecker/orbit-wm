@@ -1,12 +1,14 @@
 import { makeAutoObservable } from "mobx";
 
 import { browsers, terminals } from "../index";
+import { WindowManager } from ".";
 
 
 class WindowPaneInstance {
     constructor(
         title = "Window",
         kind: WindowPaneInstance['kind'] = "terminal",
+        private root: WindowManager,
     ) {
         this.id = `window_${globalThis.crypto?.randomUUID?.() || Date.now()}` as Instance.WindowPaneId;
         this.title = title;
@@ -39,9 +41,6 @@ class WindowPaneInstance {
 
     /** DOM container for the terminal. */
     public container: HTMLDivElement | null = null;
-
-    /** Callback fired when the window should be closed. */
-    public onClose: (() => void) | null = null;
 
     /** X position within the workspace. */
     public x = 0;
@@ -90,9 +89,7 @@ class WindowPaneInstance {
 
     /** Close this window. */
     public close = () => {
-        const onClose = this.onClose;
-        this.onClose = null;
-        onClose?.();
+        this.root.remove(this.id);
     };
 
     /** Start a terminal session for this window. */

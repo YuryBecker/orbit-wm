@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import config from "state/config";
 
@@ -23,6 +23,28 @@ const isModPressed = (event: KeyboardEvent) => {
     case "shiftKey":
         return event.shiftKey;
     }
+};
+
+export const useModKey = () => {
+    const [isModKeyDown, setIsModKeyDown] = useState(false);
+
+    useEffect(() => {
+        const abortController = new AbortController();
+
+        window.addEventListener("keydown", e => {
+            if (e.ctrlKey) setIsModKeyDown(true);
+        }, { signal: abortController.signal });
+
+        window.addEventListener("keyup", e => {
+            if (e.ctrlKey) setIsModKeyDown(false);
+        }, { signal: abortController.signal });
+
+        return () => {
+            abortController.abort();
+        };
+    }, []);
+
+    return isModKeyDown;
 };
 
 const useHotkeys = (hotkeys: Hotkey[]) => {

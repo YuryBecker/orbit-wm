@@ -1,19 +1,15 @@
-import useHotkeys from "@/hooks/useHotkeys";
+import useHotkeys, { useModKey } from "@/hooks/useHotkeys";
 import { windowManager } from "@/state";
 
 
 export const useWindowManagerKeys = () => {
-    const createWindow = async () => {
-        await windowManager.createWindowWithSession();
-    };
-
     useHotkeys([
         {
             key: "Enter",
             mod: true,
             onTrigger: (event) => {
                 event.preventDefault();
-                createWindow();
+                windowManager.createTerminalWindow();
             },
         },
         {
@@ -162,4 +158,7 @@ export const useWindowManagerKeys = () => {
         },
     ]);
 
+    const isModKeyDown = useModKey();
+
+    return isModKeyDown;
 };

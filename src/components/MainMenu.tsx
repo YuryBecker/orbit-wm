@@ -22,7 +22,6 @@ import config from "state/config";
 import { windowManager } from "state";
 
 
-
 const toRgbaString = (color: { r: number; g: number; b: number; a?: number }) => {
     if (typeof color.a === "number" && color.a < 1) {
         return `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
@@ -32,30 +31,32 @@ const toRgbaString = (color: { r: number; g: number; b: number; a?: number }) =>
 };
 
 const MainMenu = observer(() => (
-    <DropDrawer>
-        <DropDrawerTrigger asChild>
-            <IconButton variant="soft" aria-label="Open options">
-                <SlidersHorizontal size={16} />
-            </IconButton>
-        </DropDrawerTrigger>
-        <DropDrawerContent className="min-w-[220px]">
-            <DropDrawerLabel>Options</DropDrawerLabel>
-            <DropDrawerSeparator />
-            <NewMenu />
-            <WallpaperMenu />
-            <TerminalMenu />
-            <LayoutMenu />
-            <DropDrawerItem
-                icon={config.showTitleBar ? <Check size={14} /> : null}
-                onSelect={(event) => {
-                    event.preventDefault();
-                    config.toggleTitleBar();
-                }}
-            >
+    <nav className='fixed top-0 right-0 z-50'>
+        <DropDrawer >
+            <DropDrawerTrigger asChild>
+                <IconButton variant="soft" aria-label="Open options">
+                    <SlidersHorizontal size={16} />
+                </IconButton>
+            </DropDrawerTrigger>
+            <DropDrawerContent className="min-w-[220px]">
+                <DropDrawerLabel>Options</DropDrawerLabel>
+                <DropDrawerSeparator />
+                <NewMenu />
+                <WallpaperMenu />
+                <TerminalMenu />
+                <LayoutMenu />
+                <DropDrawerItem
+                    icon={config.showTitleBar ? <Check size={14} /> : null}
+                    onSelect={(event) => {
+                        event.preventDefault();
+                        config.toggleTitleBar();
+                    }}
+                >
                 Title Bars
-            </DropDrawerItem>
-        </DropDrawerContent>
-    </DropDrawer>
+                </DropDrawerItem>
+            </DropDrawerContent>
+        </DropDrawer>
+    </nav>
 ));
 
 const WallpaperMenu = observer(() => (
@@ -97,7 +98,7 @@ const NewMenu = observer(() => (
             <DropDrawerItem
                 onSelect={(event) => {
                     event.preventDefault();
-                    windowManager.createWindowWithSession();
+                    windowManager.createTerminalWindow();
                 }}
             >
                 Terminal
