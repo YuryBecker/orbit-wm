@@ -2,7 +2,40 @@
 
 ![Orbit WM screenshot](public/example.jpeg)
 
-Orbit WM is a **browser-based tiling window manager** for **tmux-backed terminals** (and lightweight browser windows).
+Orbit WM is a **browser-based tiling window manager** for terminals (and local dev browser windows).
+
+It turns any browser (tablet, TV, spare laptop, iPad) into a tiled terminal “desktop”.  
+You get multiple terminals and dashboards on one screen, layouts that come back after a restart, and a setup that looks and feels like a real window manager—without installing a full Linux desktop or giving everyone SSH access.
+
+**TL;DR, Orbit WM is useful if you:**
+- Run a lot of terminals and dashboards
+- Like tiling window managers (Hyprland-style)
+- Want this to “just work” in any modern browser
+
+## Why would you use this?
+
+**For solo devs**
+- You want a Hyprland-style tiling layout, but you’re stuck on macOS, Windows, or iPad.
+- You want your terminals, logs, and browsers to reopen exactly how you left them.
+- You’re tired of juggling tabs and manually resizing panes every time you start working.
+
+**For teams / offices**
+- You want a TV dashboard that shows logs, `htop`/`btop`, metrics, and status pages.
+- You want to show live server output to coworkers without giving them SSH access.
+- You want a “war room” view everyone can see in the browser during incidents.
+
+**For mobile / tablet users**
+- You have a tablet and want to quickly show multiple terminals on it for development.
+- You want your Linux rice (colors, fonts, wallpaper) on an iPad or tablet.
+- You hate how clunky most mobile terminal apps feel, especially on iOS.
+- You want to plug a tablet into a monitor and get a “fake desktop” made of terminals.
+
+**Quality-of-life benefits**
+- **Stop rearranging windows**: layouts are saved and restored automatically.
+- **Don’t lose work**: sessions are backed by tmux, so terminals survive browser reloads.
+- **Use any screen**: browser-only, so it works on TVs, thin clients, or borrowed machines.
+- **Looks good by default**: wallpapers, gaps, borders, and terminal theming built in.
+- **Keyboard-first**: fast navigation and swapping without touching the mouse.
 
 It’s designed for “desktop-like” multi-window workflows inside a single web page:
 - Multi-terminal dev workflows in a single browser window
@@ -11,14 +44,8 @@ It’s designed for “desktop-like” multi-window workflows inside a single we
 - Fast keyboard-driven focus/swap navigation (dwindle-style layout)
 - A local “middle layer” that keeps terminal sessions reliable by using tmux
 
-This repo contains:
-- **Frontend (Next.js / React):** the window manager UI rendered in the browser
-- **Middle layer (Node/Express/Socket.IO):** creates terminal sessions, bridges PTY I/O over websockets, persists session/config data in SQLite
-- **Terminal renderer:** `ghostty-web` runs in the browser for the terminal UI
 
 ## Quickstart (dev)
-
-### Prerequisites
 - Node.js (recommended: 20+)
 - `tmux` available on your PATH
 - Build tools for native Node modules (for `node-pty`)
@@ -31,7 +58,6 @@ npm install
 ```
 
 ### Run (two terminals)
-
 Terminal 1 — middle layer (API + Socket.IO):
 ```bash
 npm run middle:dev
