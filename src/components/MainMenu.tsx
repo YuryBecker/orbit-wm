@@ -1,7 +1,7 @@
 "use client";
 
 import { IconButton } from "@radix-ui/themes";
-import { Check, ImageUp, Shield, SlidersHorizontal, Users } from "lucide-react";
+import { Check, ImageUp, Plus, Shield, SlidersHorizontal, Trash2, Users } from "lucide-react";
 import { observer } from "mobx-react";
 import { ChromePicker, type ColorResult } from "react-color";
 import { toast } from "sonner";
@@ -41,10 +41,11 @@ const MainMenu = observer(() => (
             </DropdownMenuTrigger>
             <DropdownMenuContent className="min-w-[220px]">
                 <NewMenu />
+                <LayoutsMenu />
                 <DevicesMenu />
                 <WallpaperMenu />
                 <TerminalMenu />
-                <LayoutMenu />
+                <LayoutStyleMenu />
                 <DropdownMenuItem
                     onSelect={(event) => {
                         event.preventDefault();
@@ -139,6 +140,107 @@ const DevicesMenu = observer(() => (
         </DropdownMenuSubContent>
     </DropdownMenuSub>
 ));
+
+const LayoutsMenu = observer(() => {
+    const openLayout = async (layoutNumber: number) => {
+        const opened = await windowManager.openLayoutByIndex(layoutNumber);
+        if (!opened) {
+            toast.error(`Layout ${layoutNumber} is not available.`);
+        }
+    };
+
+    const createLayout = async () => {
+        const created = await windowManager.createLayout();
+        if (!created) {
+            toast.error("Failed to create layout.");
+            return;
+        }
+
+        toast.success("Created a new layout.");
+    };
+
+    const deleteLayout = async (layoutId: string, layoutNumber: number) => {
+        const deleted = await windowManager.deleteLayout(layoutId);
+        if (!deleted) {
+            toast.error(`Failed to delete layout ${layoutNumber}.`);
+            return;
+        }
+
+        toast.success(`Deleted layout ${layoutNumber}.`);
+    };
+
+    const activeLayoutNumber = windowManager.activeLayoutIndex;
+
+    return (
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Layouts</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[260px]">
+                <DropdownMenuLabel>Layouts</DropdownMenuLabel>
+                <DropdownMenuItem
+                    onSelect={(event) => {
+                        event.preventDefault();
+                        void createLayout();
+                    }}
+                >
+                    <Plus size={14} />
+                    New Layout
+                </DropdownMenuItem>
+                <div className="px-2 pb-2 text-xs text-muted-foreground">
+                    Use Meta/Ctrl + 1..9 to open or create numbered layouts.
+                </div>
+                <DropdownMenuSeparator />
+                {windowManager.layouts.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">
+                        No layouts available.
+                    </div>
+                ) : null}
+                {windowManager.layouts.map((layout) => {
+                    const layoutNumber = layout.slot;
+                    const isActive = layout.id === windowManager.layoutId;
+
+                    return (
+                        <div
+                            key={layout.id}
+                            className="flex items-center gap-1"
+                        >
+                            <DropdownMenuItem
+                                className="flex-1"
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    void openLayout(layoutNumber);
+                                }}
+                            >
+                                {isActive ? <Check size={14} /> : null}
+                                Layout {layoutNumber}
+                                {layoutNumber <= 9 ? (
+                                    <span className="ml-auto text-[10px] tracking-wider text-muted-foreground">
+                                        {`META+${layoutNumber}`}
+                                    </span>
+                                ) : null}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                variant="destructive"
+                                className="px-2"
+                                disabled={windowManager.layouts.length <= 1}
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    void deleteLayout(layout.id, layoutNumber);
+                                }}
+                            >
+                                <Trash2 size={14} />
+                            </DropdownMenuItem>
+                        </div>
+                    );
+                })}
+                {activeLayoutNumber ? (
+                    <div className="px-2 pt-2 text-xs text-muted-foreground">
+                        Active: Layout {activeLayoutNumber}
+                    </div>
+                ) : null}
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
+    );
+});
 
 const TerminalMenu = observer(() => (
     <DropdownMenuSub>
@@ -258,9 +360,9 @@ const TerminalMenu = observer(() => (
     </DropdownMenuSub>
 ));
 
-const LayoutMenu = observer(() => (
+const LayoutStyleMenu = observer(() => (
     <DropdownMenuSub>
-        <DropdownMenuSubTrigger>Layout</DropdownMenuSubTrigger>
+        <DropdownMenuSubTrigger>Layout Style</DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
             <DropdownMenuGroup>
                 <div className="px-4 py-3">

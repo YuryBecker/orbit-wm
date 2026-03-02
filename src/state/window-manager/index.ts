@@ -30,8 +30,14 @@ export class WindowManager {
     /** Currently active window id. */
     public activeId: string | null = DEFAULTS.activeId;
 
-    /** Session id for the current workspace. */
-    public sessionId: string | null = null;
+    /** Active layout session id. */
+    public layoutId: string | null = null;
+
+    /** Active layout slot number. */
+    public layoutSlot: number | null = null;
+
+    /** All known layouts keyed by explicit layout slot numbers. */
+    public layouts: LayoutSessionRecord[] = [];
 
     /** Whether the workspace finished loading. */
     public isReady = false;
@@ -43,6 +49,12 @@ export class WindowManager {
 
     /** Prevent persistence writes during hydration. */
     private suppressSave = false;
+
+    /** Debounce timer for layout persistence requests. */
+    private saveLayoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /** Most-recently-focused window ids (latest at the end). */
+    private focusHistory: string[] = [];
 
 
     /* ---- Computed ---- */
@@ -71,6 +83,24 @@ export class WindowManager {
 
     public get needsNewSession(): boolean {
         return this.all.length > 0;
+    }
+
+    /** Active layout slot number. */
+    public get activeLayoutIndex() {
+        if (typeof this.layoutSlot === "number" && this.layoutSlot > 0) {
+            return this.layoutSlot;
+        }
+
+        if (!this.layoutId) {
+            return null;
+        }
+
+        const activeLayout = this.layouts.find((layout) => layout.id === this.layoutId);
+        if (!activeLayout) {
+            return null;
+        }
+
+        return activeLayout.slot;
     }
 
     /** Serialized state for persistence. */
@@ -104,19 +134,24 @@ export class WindowManager {
 
 
     /* ---- Actions ---- */
-    /** Load and hydrate the workspace session. */
-    public loadSession = async (sessionId: string | null) => {
-        if (!sessionId) {
+    /** Load and hydrate a layout by id. */
+    public loadLayout = async (layoutId: string | null) => {
+        if (!layoutId) {
             return null;
         }
 
-        const payload = await this.fetchSession(sessionId);
+        await this.deletePreviousLayoutIfEmpty(layoutId);
+
+        const payload = await this.fetchLayout(layoutId);
         if (!payload) {
             return null;
         }
 
-        this.sessionId = sessionId;
-        this.hydrateFromSession(payload?.data, sessionId);
+        this.layoutId = layoutId;
+        this.layoutSlot = this.resolveLayoutSlot(layoutId, payload?.data ?? null);
+        this.setLastLayoutId(layoutId);
+        this.hydrateFromLayout(payload?.data, layoutId);
+        this.computeLayout();
         return payload;
     };
 
@@ -138,58 +173,39 @@ export class WindowManager {
         });
     };
 
-    /** Ensure a workspace session exists and hydrate state. */
-    public ensureWorkspaceSession = async () => {
-        const storedId =
-            typeof window !== "undefined"
-                ? globalThis.localStorage?.getItem("orbitSessionId")
-                : null;
+    /** Ensure a layout exists and hydrate state. */
+    public ensureActiveLayout = async () => {
+        await this.fetchLayouts();
 
-        if (storedId) {
-            try {
-                const payload = await this.loadSession(storedId);
-
-                if (payload?.id) {
-                    this.sessionId = payload.id;
-                    config.hydrateFromSession(payload?.data ?? null);
-                    return payload.id;
-                }
-            } catch {
-                return null;
+        const localLayoutId = this.getLastLayoutId();
+        if (localLayoutId) {
+            const payload = await this.loadLayout(localLayoutId);
+            if (payload?.id) {
+                return payload.id;
             }
         }
 
-        try {
-            const authed = await clients.authFetch(`${this.baseUrl}/api/session`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-            });
-            if (!authed.ok) {
-                console.error("Failed to create a new session:", authed);
-                return null;
+        const latestLayout = [...this.layouts]
+            .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""))[0];
+        if (latestLayout?.id) {
+            const payload = await this.loadLayout(latestLayout.id);
+            if (payload?.id) {
+                return payload.id;
             }
-            const payload = await authed.json();
-            const createdId = payload.id as string;
-
-            if (typeof window !== "undefined") {
-                globalThis.localStorage?.setItem("orbitSessionId", createdId);
-            }
-
-            this.sessionId = createdId;
-            this.hydrateFromSession(payload?.data, createdId);
-
-            return createdId;
-        } catch {
-            return null;
         }
+
+        const created = await this.createLayout();
+        if (created?.id) {
+            return created.id;
+        }
+
+        return null;
     };
 
     /** Create a window and attach a new terminal session. */
     public createTerminalWindow = async () => {
-        const workspaceId = this.sessionId || (await this.ensureWorkspaceSession());
-        if (!workspaceId) {
+        const activeLayoutId = this.layoutId || (await this.ensureActiveLayout());
+        if (!activeLayoutId) {
             return null;
         }
 
@@ -208,8 +224,8 @@ export class WindowManager {
 
     /** Create a browser window. */
     public createBrowserWindow = async (url = "") => {
-        const workspaceId = this.sessionId || (await this.ensureWorkspaceSession());
-        if (!workspaceId) {
+        const activeLayoutId = this.layoutId || (await this.ensureActiveLayout());
+        if (!activeLayoutId) {
             return null;
         }
 
@@ -223,13 +239,118 @@ export class WindowManager {
 
     /** Bootstrap the workspace state. */
     public bootstrap = async () => {
-        const id = await this.ensureWorkspaceSession();
+        const id = await this.ensureActiveLayout();
         await config.fetchConfig();
         if (!id && this.all.length === 0) {
-            this.sessionId = null;
+            this.layoutId = null;
+            this.layoutSlot = null;
         }
         this.isReady = true;
         return id;
+    };
+
+    /** Open layout by explicit slot number. */
+    public openLayoutByIndex = async (layoutNumber: number) => {
+        if (layoutNumber <= 0) {
+            return null;
+        }
+
+        await this.fetchLayouts();
+        const target = this.layouts.find((layout) => layout.slot === layoutNumber);
+        if (target?.id) {
+            const payload = await this.loadLayout(target.id);
+            if (!payload?.id) {
+                return null;
+            }
+
+            await this.fetchLayouts();
+            return payload.id;
+        }
+
+        const created = await this.createLayout(layoutNumber);
+        if (!created?.id) {
+            return null;
+        }
+
+        await this.fetchLayouts();
+        return created.id;
+    };
+
+    /** Create a new empty layout session and switch to it. */
+    public createLayout = async (requestedSlot?: number) => {
+        const layoutSlot = Number.isInteger(requestedSlot) && (requestedSlot as number) > 0
+            ? (requestedSlot as number)
+            : this.getNextAvailableLayoutSlot();
+
+        try {
+            const response = await clients.authFetch(`${this.baseUrl}/api/session`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    name: `Layout ${layoutSlot}`,
+                    data: {
+                        orbitType: "layout",
+                        orbitLayoutSlot: layoutSlot,
+                    },
+                }),
+            });
+            if (!response.ok) {
+                return null;
+            }
+
+            const payload = (await response.json()) as LayoutSessionPayload;
+            this.layoutId = payload.id;
+            this.layoutSlot = layoutSlot;
+            this.setLastLayoutId(payload.id);
+            this.hydrateFromLayout(payload?.data, payload.id);
+            this.computeLayout();
+            await this.fetchLayouts();
+            return payload;
+        } catch {
+            return null;
+        }
+    };
+
+    /** Delete a layout and move to another available layout if needed. */
+    public deleteLayout = async (layoutId: string) => {
+        const response = await clients.authFetch(`${this.baseUrl}/api/session/${layoutId}`, {
+            method: "DELETE",
+        });
+
+        if (!response.ok && response.status !== 404) {
+            return false;
+        }
+
+        const wasActive = this.layoutId === layoutId;
+        await this.fetchLayouts();
+
+        if (!wasActive) {
+            return true;
+        }
+
+        const next = [...this.layouts]
+            .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""))[0];
+        if (next?.id) {
+            const payload = await this.loadLayout(next.id);
+            if (payload?.id) {
+                return true;
+            }
+        }
+
+        const created = await this.createLayout();
+        if (created?.id) {
+            return true;
+        }
+
+        this.layoutId = null;
+        this.layoutSlot = null;
+        this.clearLastLayoutId();
+        this.suppressSave = true;
+        this.reset();
+        this.suppressSave = false;
+        return true;
     };
 
     /** Update the workspace bounds and recompute layout. */
@@ -270,14 +391,14 @@ export class WindowManager {
 
         // Save layout:
         if (options.shouldSave !== false) {
-            void this.save();
+            void this.saveLayout();
         }
 
         return instance;
     };
 
-    /** Hydrate windows from persisted session data. */
-    public hydrateFromSession = (
+    /** Hydrate windows from persisted layout data. */
+    public hydrateFromLayout = (
         data: {
             windows?: {
                 title?: string;
@@ -297,19 +418,10 @@ export class WindowManager {
         this.suppressSave = true;
         this.reset();
 
-        const hasStoredWindows = Array.isArray(data?.windows);
         const windows =
             data?.windows?.length && data.windows.length > 0
                 ? [...data.windows]
                 : [];
-
-        if (!hasStoredWindows && windows.length === 0 && fallbackSessionId) {
-            windows.push({
-                title: "Terminal",
-                sessionId: fallbackSessionId,
-                kind: "terminal",
-            });
-        }
 
         const canHydrateLayout =
             windows.length > 0 &&
@@ -326,13 +438,15 @@ export class WindowManager {
                 this.root = root;
                 this.recalculate();
 
+                let nextActiveId: string | null = created[0]?.id ?? null;
                 if (
                     typeof data?.activeIndex === "number" &&
                     data.activeIndex >= 0 &&
                     data.activeIndex < created.length
                 ) {
-                    this.activeId = created[data.activeIndex].id;
+                    nextActiveId = created[data.activeIndex].id;
                 }
+                this.setActive(nextActiveId);
 
                 this.suppressSave = false;
                 return;
@@ -355,18 +469,20 @@ export class WindowManager {
             });
         });
 
+        let nextActiveId: string | null = this.all[0]?.id ?? null;
         if (
             typeof data?.activeIndex === "number" &&
             data.activeIndex >= 0 &&
             data.activeIndex < this.all.length
         ) {
-            this.activeId = this.all[data.activeIndex].id;
+            nextActiveId = this.all[data.activeIndex].id;
         }
+        this.setActive(nextActiveId);
 
         this.suppressSave = false;
 
         if (data?.layout === undefined || data?.layout === null) {
-            void this.save();
+            void this.saveLayout();
         }
     };
 
@@ -379,19 +495,40 @@ export class WindowManager {
             return;
         }
 
+        const shouldDeleteTerminalSession =
+            instance.kind === "terminal" &&
+            !!instance.sessionId &&
+            !this.all.some(
+                (existing) => existing.id !== id && existing.sessionId === instance.sessionId,
+            );
+        const sessionIdToDelete =
+            shouldDeleteTerminalSession && instance.sessionId
+                ? instance.sessionId
+                : null;
+
         instance.dispose();
         this.removeNode(instance);
 
         const update = { ...this.instances };
         delete update[id];
         this.instances = update;
+        this.removeFromFocusHistory(id);
 
         if (this.activeId === id) {
-            this.activeId = Object.keys(update)[0] || null;
+            const fallbackId =
+                this.getLastFocusedId(update) ||
+                Object.keys(update)[0] ||
+                null;
+            this.activeId = null;
+            this.setActive(fallbackId);
+        }
+
+        if (sessionIdToDelete) {
+            void this.deleteTerminalSession(sessionIdToDelete);
         }
 
         // Save layout:
-        void this.save();
+        void this.saveLayout();
     };
 
     /** Set the active window id if it exists. */
@@ -401,13 +538,14 @@ export class WindowManager {
             return;
         }
 
-        if (this.instances[id]) {
-            this.activeId = id;
+        const instance = this.instances[id];
+        if (!instance) {
+            return;
         }
 
-        if (this.active) {
-            this.active.focus();
-        }
+        this.activeId = id;
+        this.trackFocus(id);
+        instance.focus();
     };
 
     /** Find the nearest window id in the given direction, relative to an origin window. */
@@ -510,7 +648,7 @@ export class WindowManager {
     ) => {
         const active = this.active;
         if (!active) {
-            this.activeId = this.all[0]?.id ?? null;
+            this.setActive(this.all[0]?.id ?? null);
             return;
         }
 
@@ -524,7 +662,7 @@ export class WindowManager {
     public swapNeighbor = (direction: Direction) => {
         const active = this.active;
         if (!active) {
-            this.activeId = this.all[0]?.id ?? null;
+            this.setActive(this.all[0]?.id ?? null);
             return;
         }
 
@@ -547,7 +685,7 @@ export class WindowManager {
 
         node.parent.splitTop = !node.parent.splitTop;
         this.recalculate();
-        void this.save();
+        void this.saveLayout();
     };
 
     /** Swap the window with its sibling within the parent split. */
@@ -560,7 +698,7 @@ export class WindowManager {
         const parent = node.parent;
         parent.children = [parent.children[1], parent.children[0]];
         this.recalculate();
-        void this.save();
+        void this.saveLayout();
     };
 
     /** Swap two windows in the layout tree. */
@@ -580,7 +718,7 @@ export class WindowManager {
         secondNode.window = temp;
 
         this.recalculate();
-        void this.save();
+        void this.saveLayout();
     };
 
     /** Start resizing a window edge by adjusting the nearest split boundary. */
@@ -660,7 +798,7 @@ export class WindowManager {
 
     /** Finalize resize and persist layout. */
     public endResize = () => {
-        void this.save();
+        void this.saveLayout();
     };
 
     /** Arrange windows into a fixed grid for temporary layout verification. */
@@ -695,32 +833,95 @@ export class WindowManager {
     };
 
     /* ---- API ---- */
-    /** Fetch a session payload by id. */
-    public fetchSession = async (sessionId: string) => {
-        const response = await clients.authFetch(`${this.baseUrl}/api/session/${sessionId}`);
+    /** Fetch a layout payload by id. */
+    public fetchLayout = async (layoutId: string) => {
+        const response = await clients.authFetch(`${this.baseUrl}/api/session/${layoutId}`);
         if (!response.ok) {
             return null;
         }
 
-        return response.json();
+        return response.json() as Promise<LayoutSessionPayload>;
     };
 
-    /** Update session . */
-    public save = async () => {
-        if (!this.sessionId || this.suppressSave) {
+    /** Fetch all session records and keep only layout sessions. */
+    public fetchLayouts = async () => {
+        const response = await clients.authFetch(`${this.baseUrl}/api/sessions`);
+        if (!response.ok) {
+            return [];
+        }
+
+        const payload = (await response.json()) as {
+            sessions?: LayoutSessionPayload[];
+        };
+        const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+        const layoutSessions = sessions.filter((session) => this.isLayoutSession(session));
+
+        const usedSlots = new Set<number>();
+        const withExplicitSlots = layoutSessions
+            .filter((session) => Number.isInteger(session.data?.orbitLayoutSlot))
+            .map((session) => {
+                const slot = Number(session.data?.orbitLayoutSlot);
+                return { session, slot };
+            })
+            .filter(({ slot }) => slot > 0 && !usedSlots.has(slot))
+            .sort((a, b) => a.slot - b.slot);
+
+        withExplicitSlots.forEach(({ slot }) => usedSlots.add(slot));
+
+        const withAssignedSlots = layoutSessions
+            .filter((session) => !Number.isInteger(session.data?.orbitLayoutSlot))
+            .sort((a, b) => Date.parse(a.createdAt || "") - Date.parse(b.createdAt || ""))
+            .map((session) => {
+                const slot = this.findFirstFreeSlot(usedSlots);
+                usedSlots.add(slot);
+                return { session, slot };
+            });
+
+        const layouts = [...withExplicitSlots, ...withAssignedSlots]
+            .map(({ session, slot }) => ({
+                id: session.id,
+                name: session.name || `Layout ${slot}`,
+                createdAt: session.createdAt,
+                updatedAt: session.updatedAt,
+                slot,
+            }))
+            .sort((a, b) => a.slot - b.slot);
+
+        this.layouts = layouts;
+        return layouts;
+    };
+
+    /** Persist current window graph into the active layout session. */
+    public saveLayout = async () => {
+        if (!this.layoutId || this.suppressSave) {
             return;
         }
 
-        await clients.authFetch(`${this.baseUrl}/api/session/${this.sessionId}`, {
-            method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                data: this.serialized,
-                isActive: true,
-            }),
-        });
+        if (this.saveLayoutTimer) {
+            clearTimeout(this.saveLayoutTimer);
+        }
+
+        const layoutId = this.layoutId;
+        const serialized = this.serialized;
+        const layoutSlot = this.layoutSlot;
+
+        this.saveLayoutTimer = setTimeout(() => {
+            this.saveLayoutTimer = null;
+            void clients.authFetch(`${this.baseUrl}/api/session/${layoutId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    data: {
+                        ...serialized,
+                        orbitType: "layout",
+                        orbitLayoutSlot: layoutSlot ?? undefined,
+                    },
+                    isActive: true,
+                }),
+            });
+        }, 160);
     };
 
     /** Create a new terminal session. */
@@ -744,15 +945,132 @@ export class WindowManager {
         }
     };
 
+    /** Delete a terminal backend session and release server resources. */
+    private deleteTerminalSession = async (sessionId: string) => {
+        try {
+            const response = await clients.authFetch(`${this.baseUrl}/api/session/${sessionId}`, {
+                method: "DELETE",
+            });
+
+            if (!response.ok && response.status !== 404) {
+                console.error(`Failed to delete session ${sessionId}.`);
+            }
+        } catch (error) {
+            console.error(`Error deleting session ${sessionId}:`, error);
+        }
+    };
+
     /* ---- Clean-up ---- */
     /** Reset the window manager to its defaults. */
     public reset = () => {
+        if (this.saveLayoutTimer) {
+            clearTimeout(this.saveLayoutTimer);
+            this.saveLayoutTimer = null;
+        }
+
+        for (const instance of Object.values(this.instances)) {
+            instance.dispose();
+        }
         this.workspace = DEFAULTS.workspace;
         this.splitRatio = DEFAULTS.splitRatio;
         this.splitWidthMultiplier = DEFAULTS.splitWidthMultiplier;
         this.instances = DEFAULTS.instances;
         this.activeId = DEFAULTS.activeId;
+        this.focusHistory = [];
         this.root = null;
+    };
+
+    private resolveLayoutSlot = (
+        layoutId: string,
+        data: LayoutSessionPayload["data"],
+    ) => {
+        if (Number.isInteger(data?.orbitLayoutSlot) && (data?.orbitLayoutSlot as number) > 0) {
+            return Number(data?.orbitLayoutSlot);
+        }
+
+        const fromList = this.layouts.find((layout) => layout.id === layoutId);
+        if (fromList) {
+            return fromList.slot;
+        }
+
+        return null;
+    };
+
+    /** Resolve whether a persisted record represents a layout session. */
+    private isLayoutSession = (session: LayoutSessionPayload) => {
+        const data = session?.data;
+        if (!data || typeof data !== "object") {
+            return false;
+        }
+
+        if (data.orbitType === "layout") {
+            return true;
+        }
+
+        return Array.isArray(data.windows) || data.layout !== undefined;
+    };
+
+    private getNextAvailableLayoutSlot = () => {
+        const usedSlots = new Set(this.layouts.map((layout) => layout.slot));
+        return this.findFirstFreeSlot(usedSlots);
+    };
+
+    private findFirstFreeSlot = (usedSlots: Set<number>) => {
+        let slot = 1;
+        while (usedSlots.has(slot)) {
+            slot += 1;
+        }
+
+        return slot;
+    };
+
+    private getLastLayoutId = () => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+
+        return (
+            globalThis.localStorage?.getItem(LAST_LAYOUT_STORAGE_KEY) ||
+            globalThis.localStorage?.getItem(LEGACY_LAYOUT_STORAGE_KEY)
+        );
+    };
+
+    private setLastLayoutId = (layoutId: string) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        globalThis.localStorage?.setItem(LAST_LAYOUT_STORAGE_KEY, layoutId);
+        globalThis.localStorage?.setItem(LEGACY_LAYOUT_STORAGE_KEY, layoutId);
+    };
+
+    private clearLastLayoutId = () => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        globalThis.localStorage?.removeItem(LAST_LAYOUT_STORAGE_KEY);
+        globalThis.localStorage?.removeItem(LEGACY_LAYOUT_STORAGE_KEY);
+    };
+
+    private deletePreviousLayoutIfEmpty = async (nextLayoutId: string) => {
+        const previousLayoutId = this.layoutId;
+        if (!previousLayoutId || previousLayoutId === nextLayoutId) {
+            return;
+        }
+
+        if (this.all.length > 0) {
+            return;
+        }
+
+        const response = await clients.authFetch(`${this.baseUrl}/api/session/${previousLayoutId}`, {
+            method: "DELETE",
+        });
+        if (!response.ok && response.status !== 404) {
+            return;
+        }
+
+        this.layouts = this.layouts.filter((layout) => layout.id !== previousLayoutId);
     };
 
     /** Create and register an instance from persisted window data. */
@@ -1034,6 +1352,35 @@ export class WindowManager {
     private clampSplitRatio = (ratio: number) =>
         Math.min(1.9, Math.max(0.1, ratio));
 
+    /** Track focus recency for fallback selection after close. */
+    private trackFocus = (id: string) => {
+        this.focusHistory = [
+            ...this.focusHistory.filter((focusedId) => focusedId !== id),
+            id,
+        ];
+    };
+
+    /** Remove a window id from focus history. */
+    private removeFromFocusHistory = (id: string) => {
+        this.focusHistory = this.focusHistory.filter(
+            (focusedId) => focusedId !== id,
+        );
+    };
+
+    /** Return the most recently focused window id still present. */
+    private getLastFocusedId = (
+        instances: Record<string, WindowPaneInstance> = this.instances,
+    ) => {
+        for (let index = this.focusHistory.length - 1; index >= 0; index -= 1) {
+            const focusedId = this.focusHistory[index];
+            if (instances[focusedId]) {
+                return focusedId;
+            }
+        }
+
+        return null;
+    };
+
     /** Find the node that owns the given window id. */
     private findNodeByWindowId = (id: string | null) => {
         if (!id || !this.root) {
@@ -1115,6 +1462,37 @@ type SerializedLayoutNode =
         children: [SerializedLayoutNode, SerializedLayoutNode];
     };
 
+type LayoutSessionPayload = {
+    id: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+    data: {
+        orbitType?: string;
+        orbitLayoutSlot?: number;
+        windows?: {
+            title?: string;
+            sessionId?: string | null;
+            kind?: "terminal" | "browser";
+            url?: string;
+            x?: number;
+            y?: number;
+            width?: number;
+            height?: number;
+        }[];
+        activeIndex?: number;
+        layout?: SerializedLayoutNode | null;
+    } | null;
+};
+
+type LayoutSessionRecord = {
+    id: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+    slot: number;
+};
+
 type ResizeEdge = "left" | "right" | "top" | "bottom";
 
 type ResizeContext = {
@@ -1127,6 +1505,8 @@ type ResizeContext = {
 };
 
 const MIN_WINDOW_INNER_SIZE_PX = 160;
+const LAST_LAYOUT_STORAGE_KEY = "orbitLayoutId";
+const LEGACY_LAYOUT_STORAGE_KEY = "orbitSessionId";
 
 export type { ResizeContext, ResizeEdge };
 

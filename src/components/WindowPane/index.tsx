@@ -76,6 +76,14 @@ const WindowPane = observer(
             }
         }, [instance.container, instance.kind]);
 
+        useEffect(() => {
+            if (!isActive) {
+                return;
+            }
+
+            instance.focus();
+        }, [instance, instance.terminal, isActive]);
+
         const dragX = isDragging && dragOffset ? dragOffset.x : 0;
         const dragY = isDragging && dragOffset ? dragOffset.y : 0;
 

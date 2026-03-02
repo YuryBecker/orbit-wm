@@ -180,6 +180,7 @@ class TerminalInstance {
                 if (!this.disposed) {
                     this.isConnected = true;
                     this.status = "Connected";
+                    this.syncCurrentTerminalSize();
                 }
             });
 
@@ -459,6 +460,24 @@ class TerminalInstance {
             }
 
             this.enqueueResize(cols, rows);
+        });
+
+        this.syncCurrentTerminalSize();
+    };
+
+    /** Fit and emit current terminal size so full-screen apps render correctly. */
+    private syncCurrentTerminalSize = () => {
+        if (!this.term || this.disposed) {
+            return;
+        }
+
+        requestAnimationFrame(() => {
+            if (!this.term || this.disposed) {
+                return;
+            }
+
+            this.fitAddon?.fit();
+            this.enqueueResize(this.term.cols, this.term.rows);
         });
     };
 

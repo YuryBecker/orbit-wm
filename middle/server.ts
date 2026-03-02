@@ -57,6 +57,9 @@ app.use(auth.attachPrincipal);
 
 /* ---- WebSockets ---- */
 const server = http.createServer(app);
+server.keepAliveTimeout = 300000;
+server.headersTimeout = 301000;
+server.requestTimeout = 0;
 const io = new Server(server, {
     cors: {
         origin: (origin, callback) => {

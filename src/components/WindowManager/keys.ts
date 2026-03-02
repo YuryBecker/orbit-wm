@@ -1,5 +1,6 @@
 import useHotkeys, { useModKey } from "@/hooks/useHotkeys";
 import { windowManager } from "@/state";
+import { useEffect } from "react";
 
 
 export const useWindowManagerKeys = () => {
@@ -157,6 +158,37 @@ export const useWindowManagerKeys = () => {
             },
         },
     ]);
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!event.metaKey && !event.ctrlKey) {
+                return;
+            }
+
+            if (event.shiftKey || event.altKey) {
+                return;
+            }
+
+            const match = event.code.match(/^Digit([1-9])$/);
+            if (!match?.[1]) {
+                return;
+            }
+
+            const layoutNumber = Number.parseInt(match[1], 10);
+            if (!Number.isFinite(layoutNumber)) {
+                return;
+            }
+
+            event.preventDefault();
+            void windowManager.openLayoutByIndex(layoutNumber);
+        };
+
+        window.addEventListener("keydown", onKeyDown, { capture: true });
+
+        return () => {
+            window.removeEventListener("keydown", onKeyDown, { capture: true });
+        };
+    }, []);
 
     const isModKeyDown = useModKey();
 

@@ -16,6 +16,8 @@ type MePayload = {
 const STORAGE_TOKEN_KEY = "orbitAuthToken";
 const STORAGE_REQUEST_ID_KEY = "orbitAccessRequestId";
 const STORAGE_REQUEST_CLAIM_KEY = "orbitAccessClaim";
+const MAX_REQUEST_HISTORY_ITEMS = 250;
+const MAX_SEEN_JOIN_IDS = 500;
 
 const DEFAULTS = {
     instances: {} as Record<string, ClientInstance>,
@@ -79,6 +81,12 @@ class ClientsStore {
 
     /** Poll timer for host request notifications. */
     private requestPollTimer: ReturnType<typeof setInterval> | null = null;
+
+    /** Prevent concurrent host refresh cycles. */
+    private hostRefreshInFlight = false;
+
+    /** Prevent concurrent claim polling requests. */
+    private claimPollInFlight = false;
 
 
     /* ---- Computed ---- */
@@ -161,6 +169,9 @@ class ClientsStore {
 
     /** Load saved token/request state and resolve access mode. */
     public bootstrap = async () => {
+        this.stopHostPolling();
+        this.stopClaimPolling();
+
         if (typeof window !== "undefined") {
             this.token = globalThis.localStorage.getItem(STORAGE_TOKEN_KEY);
             this.pendingRequestId = globalThis.localStorage.getItem(STORAGE_REQUEST_ID_KEY);
@@ -293,60 +304,100 @@ class ClientsStore {
             return;
         }
 
-        const [pendingResponse, historyResponse, usersResponse] = await Promise.all([
-            this.authFetch(`${this.baseUrl}/api/device-requests`),
-            this.authFetch(`${this.baseUrl}/api/device-history`),
-            this.authFetch(`${this.baseUrl}/api/users`),
-        ]);
-
-        if (pendingResponse.ok) {
-            const payload = await pendingResponse.json();
-            (payload?.requests || []).forEach((request: any) => {
-                this.upsertInstance(request.id, {
-                    kind: "request",
-                    label: request.ip ? `Device ${request.ip}` : "Device",
-                    ip: request.ip ?? null,
-                    userAgent: request.userAgent ?? null,
-                    status: request.status ?? "pending",
-                    createdAt: request.createdAt ?? null,
-                    resolvedAt: request.resolvedAt ?? null,
-                });
-            });
+        if (this.hostRefreshInFlight) {
+            return;
         }
 
-        if (historyResponse.ok) {
-            const payload = await historyResponse.json();
-            (payload?.requests || []).forEach((request: any) => {
-                this.upsertInstance(request.id, {
-                    kind: "request",
-                    label: request.ip ? `Device ${request.ip}` : "Device",
-                    ip: request.ip ?? null,
-                    userAgent: request.userAgent ?? null,
-                    status: request.status ?? "pending",
-                    createdAt: request.createdAt ?? null,
-                    resolvedAt: request.resolvedAt ?? null,
-                });
-            });
-        }
+        this.hostRefreshInFlight = true;
 
-        if (usersResponse.ok) {
-            const payload = await usersResponse.json();
-            (payload?.users || []).forEach((user: any) => {
-                this.upsertInstance(user.id, {
-                    kind: "user",
-                    label: user.label ?? "User",
-                    ip: user.lastIp ?? null,
-                    userAgent: user.lastUserAgent ?? null,
-                    status: user.isApproved ? "approved" : "denied",
-                    isReadonly: !!user.isReadonly,
-                    isApproved: !!user.isApproved,
-                    createdAt: user.createdAt ?? null,
-                    resolvedAt: user.updatedAt ?? null,
-                });
-            });
-        }
+        try {
+            const [pendingResponse, historyResponse, usersResponse] = await Promise.all([
+                this.authFetch(`${this.baseUrl}/api/device-requests`),
+                this.authFetch(`${this.baseUrl}/api/device-history`),
+                this.authFetch(`${this.baseUrl}/api/users`),
+            ]);
 
-        this.notifyNewPendingRequests();
+            const pendingIds = new Set<string>();
+            const historyIds = new Set<string>();
+            const userIds = new Set<string>();
+            let hasPendingPayload = false;
+            let hasHistoryPayload = false;
+            let hasUsersPayload = false;
+
+            if (pendingResponse.ok) {
+                const payload = await pendingResponse.json();
+                hasPendingPayload = true;
+                (payload?.requests || []).forEach((request: any) => {
+                    if (typeof request?.id !== "string") {
+                        return;
+                    }
+
+                    pendingIds.add(request.id);
+                    this.upsertInstance(request.id, {
+                        kind: "request",
+                        label: request.ip ? `Device ${request.ip}` : "Device",
+                        ip: request.ip ?? null,
+                        userAgent: request.userAgent ?? null,
+                        status: request.status ?? "pending",
+                        createdAt: request.createdAt ?? null,
+                        resolvedAt: request.resolvedAt ?? null,
+                    });
+                });
+            }
+
+            if (historyResponse.ok) {
+                const payload = await historyResponse.json();
+                hasHistoryPayload = true;
+                (payload?.requests || []).forEach((request: any) => {
+                    if (typeof request?.id !== "string") {
+                        return;
+                    }
+
+                    historyIds.add(request.id);
+                    this.upsertInstance(request.id, {
+                        kind: "request",
+                        label: request.ip ? `Device ${request.ip}` : "Device",
+                        ip: request.ip ?? null,
+                        userAgent: request.userAgent ?? null,
+                        status: request.status ?? "pending",
+                        createdAt: request.createdAt ?? null,
+                        resolvedAt: request.resolvedAt ?? null,
+                    });
+                });
+            }
+
+            if (usersResponse.ok) {
+                const payload = await usersResponse.json();
+                hasUsersPayload = true;
+                (payload?.users || []).forEach((user: any) => {
+                    if (typeof user?.id !== "string") {
+                        return;
+                    }
+
+                    userIds.add(user.id);
+                    this.upsertInstance(user.id, {
+                        kind: "user",
+                        label: user.label ?? "User",
+                        ip: user.lastIp ?? null,
+                        userAgent: user.lastUserAgent ?? null,
+                        status: user.isApproved ? "approved" : "denied",
+                        isReadonly: !!user.isReadonly,
+                        isApproved: !!user.isApproved,
+                        createdAt: user.createdAt ?? null,
+                        resolvedAt: user.updatedAt ?? null,
+                    });
+                });
+            }
+
+            if (hasPendingPayload && hasHistoryPayload && hasUsersPayload) {
+                this.pruneHostInstances(pendingIds, historyIds, userIds);
+                this.pruneRequestHistory();
+            }
+
+            this.notifyNewPendingRequests();
+        } finally {
+            this.hostRefreshInFlight = false;
+        }
     };
 
     /** Generate pairing code/link from host UI. */
@@ -447,6 +498,9 @@ class ClientsStore {
         this.needsApproval = false;
         this.pendingRequestId = null;
         this.pendingRequestClaim = null;
+        this.instances = {};
+        this.seenJoinRequestIds.clear();
+        this.stopHostPolling();
         this.stopClaimPolling();
         this.persistToken();
         this.persistPendingClaim();
@@ -496,6 +550,19 @@ class ClientsStore {
                 },
             });
         });
+
+        if (this.seenJoinRequestIds.size > MAX_SEEN_JOIN_IDS) {
+            const keepIds = new Set(
+                this.pendingRequests.map((request) => request.id),
+            );
+            const nextSeen = new Set<string>();
+            for (const requestId of this.seenJoinRequestIds) {
+                if (keepIds.has(requestId)) {
+                    nextSeen.add(requestId);
+                }
+            }
+            this.seenJoinRequestIds = nextSeen;
+        }
     };
 
     private startHostPolling = () => {
@@ -511,6 +578,15 @@ class ClientsStore {
         this.requestPollTimer = setInterval(() => {
             void this.refreshHostData();
         }, 2500);
+    };
+
+    private stopHostPolling = () => {
+        if (!this.requestPollTimer) {
+            return;
+        }
+
+        clearInterval(this.requestPollTimer);
+        this.requestPollTimer = null;
     };
 
     private stopClaimPolling = () => {
@@ -538,31 +614,93 @@ class ClientsStore {
             return;
         }
 
-        const response = await fetch(
-            `${this.baseUrl}/api/device-requests/${this.pendingRequestId}?claim=${encodeURIComponent(this.pendingRequestClaim)}`
+        if (this.claimPollInFlight) {
+            return;
+        }
+
+        this.claimPollInFlight = true;
+
+        try {
+            const response = await fetch(
+                `${this.baseUrl}/api/device-requests/${this.pendingRequestId}?claim=${encodeURIComponent(this.pendingRequestClaim)}`
+            );
+
+            if (!response.ok) {
+                return;
+            }
+
+            const payload = await response.json();
+            if (typeof payload?.token !== "string" || !payload.token) {
+                return;
+            }
+
+            this.token = payload.token;
+            this.persistToken();
+            this.pendingRequestId = null;
+            this.pendingRequestClaim = null;
+            this.persistPendingClaim();
+            this.needsApproval = false;
+            this.stopClaimPolling();
+
+            const meResponse = await this.authFetch(`${this.baseUrl}/api/me`);
+            if (meResponse.ok) {
+                this.me = await meResponse.json();
+            }
+        } finally {
+            this.claimPollInFlight = false;
+        }
+    };
+
+    private pruneHostInstances = (
+        pendingRequestIds: Set<string>,
+        historyRequestIds: Set<string>,
+        userIds: Set<string>,
+    ) => {
+        const requestIds = new Set<string>([
+            ...pendingRequestIds,
+            ...historyRequestIds,
+        ]);
+        const nextInstances: Record<string, ClientInstance> = {};
+
+        Object.entries(this.instances).forEach(([id, instance]) => {
+            if (instance.kind === "request") {
+                if (requestIds.has(id)) {
+                    nextInstances[id] = instance;
+                }
+                return;
+            }
+
+            if (instance.kind === "user" && userIds.has(id)) {
+                nextInstances[id] = instance;
+            }
+        });
+
+        this.instances = nextInstances;
+    };
+
+    private pruneRequestHistory = () => {
+        const history = this.requestHistory;
+        if (history.length <= MAX_REQUEST_HISTORY_ITEMS) {
+            return;
+        }
+
+        const keepRequestIds = new Set(
+            history.slice(0, MAX_REQUEST_HISTORY_ITEMS).map((request) => request.id),
         );
+        const nextInstances: Record<string, ClientInstance> = {};
 
-        if (!response.ok) {
-            return;
-        }
+        Object.entries(this.instances).forEach(([id, instance]) => {
+            if (instance.kind === "request") {
+                if (keepRequestIds.has(id) || instance.status === "pending") {
+                    nextInstances[id] = instance;
+                }
+                return;
+            }
 
-        const payload = await response.json();
-        if (typeof payload?.token !== "string" || !payload.token) {
-            return;
-        }
+            nextInstances[id] = instance;
+        });
 
-        this.token = payload.token;
-        this.persistToken();
-        this.pendingRequestId = null;
-        this.pendingRequestClaim = null;
-        this.persistPendingClaim();
-        this.needsApproval = false;
-        this.stopClaimPolling();
-
-        const meResponse = await this.authFetch(`${this.baseUrl}/api/me`);
-        if (meResponse.ok) {
-            this.me = await meResponse.json();
-        }
+        this.instances = nextInstances;
     };
 
     private persistToken = () => {

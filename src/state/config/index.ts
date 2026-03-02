@@ -175,6 +175,15 @@ class ConfigStore {
     /* ---- Actions ---- */
     /** Pending debounce timers for config updates. */
     private saveTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+    /** In-flight save requests keyed by config field. */
+    private saveControllers: Record<string, AbortController> = {};
+
+    /** Last queued values, serialized for cheap equality checks. */
+    private lastQueuedValues: Record<string, string> = {};
+
+    /** Last successfully saved values, serialized for dedupe. */
+    private lastSavedValues: Record<string, string> = {};
     public setWallpaper = (wallpaper: Wallpaper) => {
         this.wallpaper = wallpaper;
         this.saveConfig("wallpaper", wallpaper);
@@ -447,14 +456,46 @@ class ConfigStore {
     };
 
     public saveConfig = (key: string, value: unknown) => {
+        const serializedValue = JSON.stringify(value ?? null);
+        const queuedValue = this.lastQueuedValues[key];
+        const savedValue = this.lastSavedValues[key];
         const existingTimer = this.saveTimers[key];
+
+        if (existingTimer && queuedValue === serializedValue) {
+            return;
+        }
+
+        if (!existingTimer && savedValue === serializedValue) {
+            return;
+        }
+
+        this.lastQueuedValues[key] = serializedValue;
+
         if (existingTimer) {
             clearTimeout(existingTimer);
         }
 
         this.saveTimers[key] = setTimeout(() => {
             delete this.saveTimers[key];
-            clients.authFetch(`${this.baseUrl}/api/config`, {
+            const queued = this.lastQueuedValues[key];
+            if (!queued) {
+                return;
+            }
+
+            if (this.lastSavedValues[key] === queued) {
+                delete this.lastQueuedValues[key];
+                return;
+            }
+
+            const pendingController = this.saveControllers[key];
+            if (pendingController) {
+                pendingController.abort();
+            }
+
+            const controller = new AbortController();
+            this.saveControllers[key] = controller;
+
+            void clients.authFetch(`${this.baseUrl}/api/config`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -463,7 +504,28 @@ class ConfigStore {
                     key,
                     value,
                 }),
-            });
+                signal: controller.signal,
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    this.lastSavedValues[key] = queued;
+                    if (this.lastQueuedValues[key] === queued) {
+                        delete this.lastQueuedValues[key];
+                    }
+                })
+                .catch((error) => {
+                    if (error instanceof Error && error.name === "AbortError") {
+                        return;
+                    }
+                })
+                .finally(() => {
+                    if (this.saveControllers[key] === controller) {
+                        delete this.saveControllers[key];
+                    }
+                });
         }, 500);
     };
 

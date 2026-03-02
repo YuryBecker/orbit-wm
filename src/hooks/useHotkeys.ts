@@ -98,7 +98,6 @@ const useHotkeys = (hotkeys: Hotkey[]) => {
             }
 
             for (const hotkey of matches) {
-                console.log("Triggering...");
                 hotkey.onTrigger(event);
             }
         };

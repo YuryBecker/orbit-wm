@@ -59,18 +59,23 @@ You get multiple terminals and dashboards on one screen, layouts that come back 
 npm install
 ```
 
-### Run (one command)
+### Run (one command, production)
 ```bash
-npm run orbit:dev
+npm run orbit:start
 ```
 
 Orbit prints the LAN URL at startup, for example:
 `https://192.168.1.50:43123`
 
 Internal services are started automatically:
-- Next dev server on `127.0.0.1:43121`
+- Next production server on `127.0.0.1:43121`
 - Middle layer on `127.0.0.1:43120`
 - Caddy TLS proxy on `0.0.0.0:43123`
+
+For hot-reload development, use:
+```bash
+npm run orbit:dev
+```
 
 ### What Caddy does
 Caddy is the HTTPS front door for Orbit.
@@ -97,7 +102,7 @@ When you create a terminal window:
 ### Persistence model
 - **SQLite:** `middle/db.sqlite` stores session metadata (`sessions` table) and UI config (`config` table)
 - **tmux:** holds the actual terminal processes
-- **Browser localStorage:** stores the workspace session id as `orbitSessionId`
+- **Browser localStorage:** stores the last opened layout id as `orbitLayoutId` (legacy fallback: `orbitSessionId`)
 
 If the middle layer restarts, it can restore sessions from SQLite *if the tmux session still exists*.
 
@@ -107,6 +112,15 @@ If the middle layer restarts, it can restore sessions from SQLite *if the tmux s
 Use the menu button (top-right) → **New**:
 - **Terminal**: creates a tmux-backed terminal session
 - **Browser**: creates an iframe-based browser window
+
+### Layouts
+Use **Layouts** from the main menu to:
+- switch between saved layouts
+- create new layouts
+- delete layouts
+
+Keyboard:
+- `Meta+1..9` (or `Ctrl+1..9`) switches to layout slots 1-9
 
 ### Keyboard shortcuts
 Orbit WM uses a modifier key (currently defaults to **Ctrl**).
@@ -169,7 +183,7 @@ Set these in `.env.local` (optional):
 - `NEXT_PUBLIC_MIDDLE_PORT`: Port used to construct the middle layer URL when `NEXT_PUBLIC_MIDDLE_URL` is not set (default: `4001`)
 
 ### Middle layer environment variables
-Provide these when starting `npm run middle:dev`:
+Provide these when starting `npm run middle:dev` or `npm run middle:start`:
 - `MIDDLE_PORT`: HTTP port for the middle layer (default: `4001`)
 - `MIDDLE_HOST`: bind host for middle layer (default: `127.0.0.1`)
 - `CLIENT_ORIGIN`: Comma-separated allowlist for CORS origins (example: `http://localhost:43123`)
@@ -178,15 +192,15 @@ Provide these when starting `npm run middle:dev`:
 - `ORBIT_TERMINAL_REPLAY_BYTES`: Max bytes of terminal output to replay to newly connected clients (default: `200000`)
 - `ORBIT_DEBUG_PTY_OUTPUT`: Set to `1` to log PTY output on the server
 
-### One-command dev environment variables
-`npm run orbit:dev` supports:
+### One-command environment variables
+`npm run orbit:start` and `npm run orbit:dev` support:
 - `ORBIT_HTTPS_PORT` (default: `43123`)
 - `ORBIT_MIDDLE_PORT` (default: `43120`)
 - `ORBIT_NEXT_PORT` (default: `43121`)
 
 Example:
 ```bash
-ORBIT_HTTPS_PORT=43123 ORBIT_MIDDLE_PORT=43120 ORBIT_NEXT_PORT=43121 npm run orbit:dev
+ORBIT_HTTPS_PORT=43123 ORBIT_MIDDLE_PORT=43120 ORBIT_NEXT_PORT=43121 npm run orbit:start
 ```
 
 ## API (middle layer)
@@ -214,15 +228,16 @@ WebSockets:
   - `output` (server → client) → `{ sessionId, data }`
   - `exit` (server → client) → `{ sessionId, code, signal }`
 
-## Production-ish run
+## Production run
 
-1) Start the middle layer:
+Single command:
 ```bash
-npm run middle:dev
+npm run orbit:start
 ```
 
-2) Build and start Next.js:
+Manual split:
 ```bash
+npm run middle:start
 npm run build
 PORT=43123 npm run start
 ```

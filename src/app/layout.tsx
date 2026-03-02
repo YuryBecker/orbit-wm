@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import "@radix-ui/themes/styles.css";
 import "./globals.css";
 
+import { TooltipProvider } from "@/components/ui/tooltip";
 import PwaRegister from "@/components/PwaRegister";
 
 
@@ -39,9 +40,11 @@ export default function RootLayout({
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
             >
                 <Theme appearance="dark" accentColor="gray" radius="large">
-                    {children}
-                    <PwaRegister />
-                    <Toaster theme="dark" richColors closeButton />
+                    <TooltipProvider>
+                        {children}
+                        <PwaRegister />
+                        <Toaster theme="dark" richColors closeButton />
+                    </TooltipProvider>
                 </Theme>
             </body>
         </html>

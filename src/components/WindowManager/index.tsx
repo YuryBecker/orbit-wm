@@ -9,6 +9,7 @@ import ClientsDialog from "@/components/ClientsDialog";
 import PairDeviceDialog from "@/components/PairDeviceDialog";
 import MainMenu from "@/components/MainMenu";
 import WindowPane from "@/components/WindowPane";
+import LayoutPagination from "./LayoutPagination";
 import { useWindowManagerKeys } from "./keys";
 import Wallpaper from "./Wallpaper";
 import EmptyState from "./EmptyState";
@@ -144,6 +145,7 @@ const WindowManager = observer(() => {
             <Wallpaper/>
 
             <MainMenu />
+            <LayoutPagination />
             <ClientsDialog />
             <PairDeviceDialog />
 
