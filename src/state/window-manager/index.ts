@@ -169,16 +169,16 @@ export class WindowManager {
 
     public unmaximizeAll = () => {
         this.all.forEach(windowPane => windowPane.unmaximize());
-    }
+    };
 
     public maximizeActive = () => {
         if (!this.active) {
-            return console.warn('Cannot maximize active window pane. No active window pane.')
+            return console.warn('Cannot maximize active window pane. No active window pane.');
         }
 
         this.unmaximizeAll();
         this.active.maximize();
-    }
+    };
 
     public computeLayout = () => {
         const gap = config.gap;

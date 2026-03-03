@@ -19,6 +19,7 @@ const DebugUI = observer(() => {
     return (
         <div
             className={cn(
+                "hidden",
                 "fixed bottom-2 left-2 z-[9999]",
                 "pointer-events-none",
             )}
