@@ -8,9 +8,8 @@ import config from "state/config";
 import ClientsDialog from "@/components/ClientsDialog";
 import PairDeviceDialog from "@/components/PairDeviceDialog";
 import MainMenu from "@/components/MainMenu";
-import MirrorTerminal from "@/components/MirrorTerminal";
 import WindowPane from "@/components/WindowPane";
-import { useMirrorTerminal } from "@/hooks/useMirrorTerminal";
+import { useAutoMaximize } from "@/hooks/maximize";
 import LayoutPagination from "./LayoutPagination";
 import { useWindowManagerKeys } from "./keys";
 import Wallpaper from "./Wallpaper";
@@ -42,7 +41,7 @@ const WindowManager = observer(() => {
 
     // Shortcut keys:
     const isModKeyDown = useWindowManagerKeys();
-    useMirrorTerminal();
+    useAutoMaximize();
 
     // Update layout size:
     useEffect(() => {
@@ -151,11 +150,6 @@ const WindowManager = observer(() => {
             <LayoutPagination />
             <ClientsDialog />
             <PairDeviceDialog />
-
-            { false &&
-                <MirrorTerminal />
-            }
-
             <EmptyState/>
             <AuthWarning/>
 

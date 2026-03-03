@@ -5,7 +5,6 @@ import { io, Socket } from "socket.io-client";
 
 import clients from "state/clients";
 import config from "state/config";
-import mirrorTerminal from "state/mirror-terminal";
 import { getMiddleBaseUrl } from "../baseUrl";
 
 
@@ -77,19 +76,11 @@ class TerminalInstance {
     /** Subscribers for terminal output chunks. */
     private outputListeners = new Set<(value: string) => void>();
 
-    /** Whether the main socket is intentionally paused for mirror mode. */
-    private socketSuspendedForMirror = false;
-
 
     /* ---- Computed ---- */
     /** Terminal container element if mounted. */
     public get container() {
         return this.windowInstance?.container || null;
-    }
-
-    /** Whether this terminal is currently mirrored in the overlay. */
-    public get isMirrored() {
-        return mirrorTerminal.isActive && mirrorTerminal.mirrorFrom === this;
     }
 
     public get terminalOptions() {
@@ -232,9 +223,7 @@ class TerminalInstance {
             this.socket.on("connect", () => {
                 if (!this.disposed) {
                     this.isConnected = true;
-                    this.status = this.socketSuspendedForMirror
-                        ? "Mirrored"
-                        : "Connected";
+                    this.status = "Connected";
                     this.syncCurrentTerminalSize();
                 }
             });
@@ -243,11 +232,10 @@ class TerminalInstance {
                 this.term?.write(
                     `Socket connection error: ${error.message}\r\n`,
                 );
+
                 if (!this.disposed) {
                     this.isConnected = false;
-                    this.status = this.socketSuspendedForMirror
-                        ? "Mirrored"
-                        : "Socket error";
+                    this.status = "Socket error";
                 }
 
                 if (
@@ -284,9 +272,7 @@ class TerminalInstance {
             this.socket.on("disconnect", () => {
                 if (!this.disposed) {
                     this.isConnected = false;
-                    this.status = this.socketSuspendedForMirror
-                        ? "Mirrored"
-                        : "Disconnected";
+                    this.status = "Disconnected";
                 }
             });
 
@@ -328,19 +314,7 @@ class TerminalInstance {
     };
 
     private enqueueInput = (data: string) => {
-        console.log('Enque:', data);
-
         if (this.disposed) {
-            console.warn('Disposed.');
-            return;
-        }
-
-        if (this.socketSuspendedForMirror) {
-            console.log('Terminal instance:', data);
-
-            if (this.isMirrored) {
-                mirrorTerminal.sendInputFromSource(data);
-            }
             return;
         }
 
@@ -402,13 +376,6 @@ class TerminalInstance {
 
     private enqueueResize = (cols: number, rows: number) => {
         if (this.disposed) {
-            return;
-        }
-
-        if (this.socketSuspendedForMirror) {
-            if (this.isMirrored) {
-                mirrorTerminal.sendResizeFromSource(cols, rows);
-            }
             return;
         }
 
@@ -558,34 +525,9 @@ class TerminalInstance {
         this.enqueueResize(cols, rows);
     };
 
-    /** Pause the primary socket while this terminal is projected in mirror mode. */
-    public suspendSocketForMirror = () => {
-        if (this.disposed || this.socketSuspendedForMirror) {
-            return;
-        }
-
-        this.socketSuspendedForMirror = true;
-        this.flushPendingInput();
-        this.flushPendingResize();
-        this.socket?.disconnect();
-        this.isConnected = false;
-        this.status = "Mirrored";
-    };
-
-    /** Restore the primary socket after mirror mode exits and sync terminal size. */
-    public resumeSocketAfterMirror = () => {
-        if (this.disposed || !this.socketSuspendedForMirror) {
-            return;
-        }
-
-        this.socketSuspendedForMirror = false;
-
-        if (!this.socket) {
-            return;
-        }
-
-        this.status = "Reconnecting...";
-        this.socket.connect();
+    /** Force a terminal fit and propagate the current size to the backend. */
+    public syncSize = () => {
+        this.syncCurrentTerminalSize();
     };
 
     /** Subscribe to terminal output chunks. */
@@ -667,7 +609,6 @@ class TerminalInstance {
         this.socket?.disconnect();
         this.term?.dispose();
         this.windowInstance = null;
-        this.socketSuspendedForMirror = false;
     };
 
     /** Reset instance state back to defaults. */

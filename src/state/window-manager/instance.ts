@@ -1,7 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
 import { browsers, terminals } from "../index";
-import mirrorTerminal from "state/mirror-terminal";
 import { WindowManager } from ".";
 
 
@@ -54,6 +53,9 @@ class WindowPaneInstance {
 
     /** Height of the window. */
     public height = 0;
+
+    /** Whether this window is currently taking up the whole screen. */
+    public isMaximized = false;
 
 
     /* ---- Computed ---- */
@@ -131,6 +133,10 @@ class WindowPaneInstance {
         this.browser?.setUrl(url);
     };
 
+    public maximize = () => this.isMaximized = true;
+
+    public unmaximize = () => this.isMaximized = false;
+
 
     /* ---- Clean-up ---- */
     /** Reset the window to its default box. */
@@ -144,7 +150,6 @@ class WindowPaneInstance {
     /** Dispose any attached resources. */
     public dispose = () => {
         if (this.terminal) {
-            mirrorTerminal.clearFrom(this.terminal);
             terminals.remove(this.terminal.id);
         }
 

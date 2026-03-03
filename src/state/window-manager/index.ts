@@ -63,10 +63,16 @@ export class WindowManager {
         return getMiddleBaseUrl();
     }
 
+    /** All window instances in insertion order. */
+    public get all() {
+        return Object.values(this.instances);
+    }
+
     /** Whether the workspace has finished bootstrapping. */
     public get ready() {
         return this.isReady;
     }
+
     /** Active window instance. */
     public get active(): WindowPaneInstance | null {
         if (!this.activeId) {
@@ -76,9 +82,9 @@ export class WindowManager {
         return this.instances[this.activeId] || null;
     }
 
-    /** All window instances in insertion order. */
-    public get all() {
-        return Object.values(this.instances);
+    /** Terminal currently in focus. */
+    public get activeTerminal(): Instance.Terminal | null {
+        return this.active?.terminal || null;
     }
 
     public get needsNewSession(): boolean {
@@ -160,6 +166,19 @@ export class WindowManager {
 
         this.computeLayout();
     };
+
+    public unmaximizeAll = () => {
+        this.all.forEach(windowPane => windowPane.unmaximize());
+    }
+
+    public maximizeActive = () => {
+        if (!this.active) {
+            return console.warn('Cannot maximize active window pane. No active window pane.')
+        }
+
+        this.unmaximizeAll();
+        this.active.maximize();
+    }
 
     public computeLayout = () => {
         const gap = config.gap;

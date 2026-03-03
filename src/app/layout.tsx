@@ -7,6 +7,7 @@ import "./globals.css";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import PwaRegister from "@/components/PwaRegister";
+import DebugUI from "@/components/DebugUI";
 
 
 const geistSans = Geist({
@@ -42,6 +43,7 @@ export default function RootLayout({
                 <Theme appearance="dark" accentColor="gray" radius="large">
                     <TooltipProvider>
                         {children}
+                        <DebugUI />
                         <PwaRegister />
                         <Toaster theme="dark" richColors closeButton />
                     </TooltipProvider>

@@ -52,6 +52,8 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 ## Agent Execution Rules
 - Do not run linting commands in this repository.
 - Specifically, never run `npm run lint`, `eslint`, or any lint auto-fix command.
+- Do not run build commands in this repository.
+- Specifically, never run `npm run build` or `next build`.
 
 ## Local Middle Server Notes (Orbit)
 - Middle server lives in `middle/` and is split into:
@@ -82,3 +84,13 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 - Prefer PascalCase components and `camelCase` utilities.
 - Leave two blank lines after the last import before other code.
 - For `Button` components, prefer built-in props (`variant`, `size`, etc.) instead of ad-hoc Tailwind class strings. Only use custom button classes when absolutely necessary.
+
+## Tailwind
+- Always use Tailwind CSS for styling.
+- Use the `cn` utility for class composition via `import { cn } from "@/lib/cn"`.
+- Use `cn` object conditionals for dynamic classes (for example: `cn("flex flex-col", { hidden: ifSomething })`) instead of ternaries inside class strings.
+- In `cn(...)`, group classes by category in one string argument per category (not one class per line), separated by commas.
+- Keep category order consistent: positioning first, then flexbox/layout, then sizing (`w-*`, `h-*`) and spacing (`m-*`, `p-*`), then text, then background, then visual/interaction classes (`rounded-*`, `shadow-*`, `pointer-events-*`, animation, etc.).
+- For text colors, prefer semantic classes such as `text-high` and `text-low` instead of raw Tailwind grays.
+- Prefer semantic palette classes (`blue-high`, `blue-mid`, `blue-low`, `red-*`, `yellow-*`, `green-*`) over raw Tailwind color scale classes where equivalents exist.
+- Prefer `gap-*` for spacing between sibling elements instead of margin where possible.

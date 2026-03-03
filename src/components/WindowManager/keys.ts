@@ -1,6 +1,7 @@
-import useHotkeys, { useModKey } from "@/hooks/useHotkeys";
-import { windowManager } from "@/state";
 import { useEffect } from "react";
+
+import useHotkeys, { useModKey } from "@/hooks/hot-keys";
+import { windowManager } from "@/state";
 
 
 export const useWindowManagerKeys = () => {
