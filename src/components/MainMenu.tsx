@@ -142,6 +142,8 @@ const DevicesMenu = observer(() => (
 ));
 
 const LayoutsMenu = observer(() => {
+    const canCreateLayout = windowManager.layouts.length < 9;
+
     const openLayout = async (layoutNumber: number) => {
         const opened = await windowManager.openLayoutByIndex(layoutNumber);
         if (!opened) {
@@ -150,6 +152,11 @@ const LayoutsMenu = observer(() => {
     };
 
     const createLayout = async () => {
+        if (!canCreateLayout) {
+            toast.error("You can only have up to 9 layouts.");
+            return;
+        }
+
         const created = await windowManager.createLayout();
         if (!created) {
             toast.error("Failed to create layout.");
@@ -177,6 +184,7 @@ const LayoutsMenu = observer(() => {
             <DropdownMenuSubContent className="w-[260px]">
                 <DropdownMenuLabel>Layouts</DropdownMenuLabel>
                 <DropdownMenuItem
+                    disabled={!canCreateLayout}
                     onSelect={(event) => {
                         event.preventDefault();
                         void createLayout();

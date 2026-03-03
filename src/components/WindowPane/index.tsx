@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
 import { observer } from "mobx-react";
 import { motion } from "framer-motion";
@@ -35,7 +35,6 @@ const WindowPane = observer(
     }: WindowPaneProps) => {
         const containerRef = useRef<HTMLDivElement | null>(null);
         const resizeRef = useRef<ResizeContext | null>(null);
-        const id = useId();
         const isDragging = activeDragId === instance.id;
 
         const status = instance.status.toLowerCase();
@@ -183,6 +182,10 @@ const WindowPane = observer(
                 onMouseEnter={() => {
                     windowManager.setActive(instance.id);
                 }}
+                onPointerDown={() => {
+                    windowManager.setActive(instance.id);
+                    instance.focus();
+                }}
                 onMouseDown={(event) => {
                     handleModRightClickResize(event);
 
@@ -255,7 +258,6 @@ const WindowPane = observer(
                 ) : (
                     <Terminal
                         instance={instance}
-                        containerId={id}
                         containerRef={containerRef as any}
                     />
                 )}

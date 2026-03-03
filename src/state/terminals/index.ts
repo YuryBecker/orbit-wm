@@ -15,7 +15,13 @@ class TerminalsStore {
     /** The active terminal id. */
     public activeId: string | null = DEFAULTS.activeId;
 
+
     /* ---- Computed ---- */
+    /** All terminal instances in insertion order. */
+    public get all() {
+        return Object.values(this.instances);
+    }
+
     /** The active terminal instance. */
     public get active() {
         if (!this.activeId) {
@@ -25,10 +31,6 @@ class TerminalsStore {
         return this.instances[this.activeId] || null;
     }
 
-    /** All terminal instances in insertion order. */
-    public get all() {
-        return Object.values(this.instances);
-    }
 
     /* ---- Actions ---- */
     /** Create and register a new terminal instance. */
@@ -58,6 +60,7 @@ class TerminalsStore {
             this.activeId = Object.keys(update)[0] || null;
         }
     };
+
 
     /* ---- Clean-up ---- */
     /** Reset the store to its defaults. */

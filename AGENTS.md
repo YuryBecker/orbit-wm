@@ -49,6 +49,10 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 - `npm run middle:dev` runs the local middle server (Node/Express).
 - Django (from `db/`): `python manage.py runserver`.
 
+## Agent Execution Rules
+- Do not run linting commands in this repository.
+- Specifically, never run `npm run lint`, `eslint`, or any lint auto-fix command.
+
 ## Local Middle Server Notes (Orbit)
 - Middle server lives in `middle/` and is split into:
   - `middle/server.ts` (bootstrap)

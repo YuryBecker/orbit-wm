@@ -128,6 +128,20 @@ const getSocketIp = (
     return address || null;
 };
 
+const parseHandshakeSize = (value: unknown) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+        return null;
+    }
+
+    const integer = Math.floor(numeric);
+    if (integer <= 0) {
+        return null;
+    }
+
+    return integer;
+};
+
 /* ---- Namespace Factory ---- */
 const createTerminalNamespace = (
     io: Server,
@@ -198,6 +212,12 @@ const createTerminalNamespace = (
             console.log(`Socket connected with missing session: ${sessionId}`);
             socket.disconnect();
             return;
+        }
+
+        const handshakeCols = parseHandshakeSize(socket.handshake.auth?.cols);
+        const handshakeRows = parseHandshakeSize(socket.handshake.auth?.rows);
+        if (handshakeCols && handshakeRows) {
+            session.pty.resize(handshakeCols, handshakeRows);
         }
 
         socket.join(sessionId);

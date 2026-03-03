@@ -5,6 +5,7 @@ import { io, Socket } from "socket.io-client";
 
 import clients from "state/clients";
 import config from "state/config";
+import mirrorTerminal from "state/mirror-terminal";
 import { getMiddleBaseUrl } from "../baseUrl";
 
 
@@ -72,6 +73,55 @@ class TerminalInstance {
 
     /** Timer for debouncing resize events to the backend. */
     private resizeFlushTimer: number | null = null;
+
+    /** Subscribers for terminal output chunks. */
+    private outputListeners = new Set<(value: string) => void>();
+
+    /** Whether the main socket is intentionally paused for mirror mode. */
+    private socketSuspendedForMirror = false;
+
+
+    /* ---- Computed ---- */
+    /** Terminal container element if mounted. */
+    public get container() {
+        return this.windowInstance?.container || null;
+    }
+
+    /** Whether this terminal is currently mirrored in the overlay. */
+    public get isMirrored() {
+        return mirrorTerminal.isActive && mirrorTerminal.mirrorFrom === this;
+    }
+
+    public get terminalOptions() {
+        return {
+            cursorBlink: true,
+            fontSize: config.terminalFontSize,
+            fontFamily: config.terminalFontFamily,
+            theme: {
+                foreground: "#c5c8c6",
+                background: config.terminalColor,
+                selectionForeground: "#93a1a1",
+                selectionBackground: "#073642",
+                black: "#282a2e",
+                red: "#a54242",
+                green: "#8c9440",
+                yellow: "#de935f",
+                blue: "#5f819d",
+                magenta: "#85678f",
+                cyan: "#5e8d87",
+                white: "#707880",
+                brightBlack: "#373b41",
+                brightRed: "#cc6666",
+                brightGreen: "#b5bd68",
+                brightYellow: "#f0c674",
+                brightBlue: "#81a2be",
+                brightMagenta: "#b294bb",
+                brightCyan: "#8abeb7",
+                brightWhite: "#c5c8c6",
+            },
+        };
+    }
+
 
     /* ---- Actions ---- */
     /** Mount and initialize the terminal in the provided window. */
@@ -166,11 +216,14 @@ class TerminalInstance {
 
             this.sessionId = sessionId;
             this.status = "Connecting to socket...";
+            const initialSize = this.getCurrentTerminalSize();
 
             this.socket = io(`${baseUrl}/terminal`, {
                 auth: {
                     sessionId,
                     token: clients.getSocketToken(),
+                    cols: initialSize?.cols,
+                    rows: initialSize?.rows,
                 },
                 autoConnect: false,
                 transports: ["websocket"],
@@ -179,7 +232,9 @@ class TerminalInstance {
             this.socket.on("connect", () => {
                 if (!this.disposed) {
                     this.isConnected = true;
-                    this.status = "Connected";
+                    this.status = this.socketSuspendedForMirror
+                        ? "Mirrored"
+                        : "Connected";
                     this.syncCurrentTerminalSize();
                 }
             });
@@ -190,7 +245,9 @@ class TerminalInstance {
                 );
                 if (!this.disposed) {
                     this.isConnected = false;
-                    this.status = "Socket error";
+                    this.status = this.socketSuspendedForMirror
+                        ? "Mirrored"
+                        : "Socket error";
                 }
 
                 if (
@@ -227,7 +284,9 @@ class TerminalInstance {
             this.socket.on("disconnect", () => {
                 if (!this.disposed) {
                     this.isConnected = false;
-                    this.status = "Disconnected";
+                    this.status = this.socketSuspendedForMirror
+                        ? "Mirrored"
+                        : "Disconnected";
                 }
             });
 
@@ -245,33 +304,6 @@ class TerminalInstance {
             }
         }
     };
-
-    private createSession = async (baseUrl: string) => {
-        const response = await clients.authFetch(`${baseUrl}/api/session`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-        });
-
-        if (!response.ok) {
-            throw new Error("Failed to create session.");
-        }
-
-        const payload = await response.json();
-        const sessionId = payload.id as string;
-        if (this.windowInstance) {
-            this.windowInstance.sessionId = sessionId;
-        }
-        this.attemptedFallback = false;
-        return sessionId;
-    };
-
-    /* ---- Computed ---- */
-    /** Terminal container element if mounted. */
-    public get container() {
-        return this.windowInstance?.container || null;
-    }
 
     private flushPendingInput = () => {
         if (this.inputFlushTimer !== null) {
@@ -296,7 +328,19 @@ class TerminalInstance {
     };
 
     private enqueueInput = (data: string) => {
+        console.log('Enque:', data);
+
         if (this.disposed) {
+            console.warn('Disposed.');
+            return;
+        }
+
+        if (this.socketSuspendedForMirror) {
+            console.log('Terminal instance:', data);
+
+            if (this.isMirrored) {
+                mirrorTerminal.sendInputFromSource(data);
+            }
             return;
         }
 
@@ -342,8 +386,29 @@ class TerminalInstance {
         });
     };
 
+    private getCurrentTerminalSize = () => {
+        if (!this.term) {
+            return null;
+        }
+
+        const cols = Number(this.term.cols);
+        const rows = Number(this.term.rows);
+        if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) {
+            return null;
+        }
+
+        return { cols, rows };
+    };
+
     private enqueueResize = (cols: number, rows: number) => {
         if (this.disposed) {
+            return;
+        }
+
+        if (this.socketSuspendedForMirror) {
+            if (this.isMirrored) {
+                mirrorTerminal.sendResizeFromSource(cols, rows);
+            }
             return;
         }
 
@@ -375,6 +440,7 @@ class TerminalInstance {
         this.pendingOutput = "";
         if (value) {
             this.term?.write(value);
+            this.outputListeners.forEach((listener) => listener(value));
         }
     };
 
@@ -389,6 +455,7 @@ class TerminalInstance {
         }
 
         this.outputFlushScheduled = true;
+
         queueMicrotask(() => {
             if (!this.disposed) {
                 this.flushPendingOutput();
@@ -397,33 +464,7 @@ class TerminalInstance {
     };
 
     private createTerminal = (container: HTMLElement) => {
-        this.term = new GhosttyTerminal({
-            cursorBlink: true,
-            fontSize: config.terminalFontSize,
-            fontFamily: config.terminalFontFamily,
-            theme: {
-                foreground: "#c5c8c6",
-                background: config.terminalColor,
-                selectionForeground: "#93a1a1",
-                selectionBackground: "#073642",
-                black: "#282a2e",
-                red: "#a54242",
-                green: "#8c9440",
-                yellow: "#de935f",
-                blue: "#5f819d",
-                magenta: "#85678f",
-                cyan: "#5e8d87",
-                white: "#707880",
-                brightBlack: "#373b41",
-                brightRed: "#cc6666",
-                brightGreen: "#b5bd68",
-                brightYellow: "#f0c674",
-                brightBlue: "#81a2be",
-                brightMagenta: "#b294bb",
-                brightCyan: "#8abeb7",
-                brightWhite: "#c5c8c6",
-            },
-        });
+        this.term = new GhosttyTerminal(this.terminalOptions);
 
         this.fitAddon = new FitAddon();
         this.term.loadAddon(this.fitAddon);
@@ -507,40 +548,126 @@ class TerminalInstance {
         }
     };
 
+    /** Send terminal input to the backend session. */
+    public sendInput = (data: string) => {
+        this.enqueueInput(data);
+    };
+
+    /** Send terminal resize to the backend session. */
+    public sendResize = (cols: number, rows: number) => {
+        this.enqueueResize(cols, rows);
+    };
+
+    /** Pause the primary socket while this terminal is projected in mirror mode. */
+    public suspendSocketForMirror = () => {
+        if (this.disposed || this.socketSuspendedForMirror) {
+            return;
+        }
+
+        this.socketSuspendedForMirror = true;
+        this.flushPendingInput();
+        this.flushPendingResize();
+        this.socket?.disconnect();
+        this.isConnected = false;
+        this.status = "Mirrored";
+    };
+
+    /** Restore the primary socket after mirror mode exits and sync terminal size. */
+    public resumeSocketAfterMirror = () => {
+        if (this.disposed || !this.socketSuspendedForMirror) {
+            return;
+        }
+
+        this.socketSuspendedForMirror = false;
+
+        if (!this.socket) {
+            return;
+        }
+
+        this.status = "Reconnecting...";
+        this.socket.connect();
+    };
+
+    /** Subscribe to terminal output chunks. */
+    public onOutput = (listener: (value: string) => void) => {
+        this.outputListeners.add(listener);
+
+        return () => {
+            this.outputListeners.delete(listener);
+        };
+    };
+
+    public scrollToBottom = () => {
+        if (!this.term) return console.error('Could not scroll to bottom. Missing Ghostty.');
+
+        this.term.scrollToBottom();
+    };
+
+
+    /* ---- API  ---- */
+    private createSession = async (baseUrl: string) => {
+        const response = await clients.authFetch(`${baseUrl}/api/session`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to create session.");
+        }
+
+        const payload = await response.json();
+        const sessionId = payload.id as string;
+        if (this.windowInstance) {
+            this.windowInstance.sessionId = sessionId;
+        }
+        this.attemptedFallback = false;
+        return sessionId;
+    };
+
+
     /* ---- Clean-up ---- */
     /** Dispose terminal resources and close sockets. */
     public dispose = () => {
         if (this.disposed) {
-            return;
+            return console.error('Tried to dispose an already removed terminal.');
         }
 
         this.disposed = true;
         this.disposeDataListener?.dispose();
         this.disposeResizeListener?.dispose();
+
         if (this.disposeConfigReaction) {
             this.disposeConfigReaction();
             this.disposeConfigReaction = null;
         }
+
         if (this.configDebounceTimer) {
             clearTimeout(this.configDebounceTimer);
             this.configDebounceTimer = null;
         }
+
         if (this.inputFlushTimer !== null) {
             window.clearTimeout(this.inputFlushTimer);
             this.inputFlushTimer = null;
         }
+
         if (this.resizeFlushTimer !== null) {
             window.clearTimeout(this.resizeFlushTimer);
             this.resizeFlushTimer = null;
         }
+
         this.pendingInput = "";
         this.pendingResize = null;
         this.pendingOutput = "";
         this.outputFlushScheduled = false;
+        this.outputListeners.clear();
         this.resizeObserver?.disconnect();
         this.socket?.disconnect();
         this.term?.dispose();
         this.windowInstance = null;
+        this.socketSuspendedForMirror = false;
     };
 
     /** Reset instance state back to defaults. */

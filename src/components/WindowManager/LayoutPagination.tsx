@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Plus } from "lucide-react";
 import { observer } from "mobx-react";
 import { toast } from "sonner";
 
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
 
 
 const LayoutPagination = observer(() => {
+    const canCreateLayout = windowManager.layouts.length < 9;
+
     useEffect(() => {
         void windowManager.fetchLayouts();
     }, []);
@@ -18,6 +21,18 @@ const LayoutPagination = observer(() => {
         const opened = await windowManager.openLayoutByIndex(layoutSlot);
         if (!opened) {
             toast.error(`Layout ${layoutSlot} is not available.`);
+        }
+    };
+
+    const createLayout = async () => {
+        if (!canCreateLayout) {
+            toast.error("You can only have up to 9 layouts.");
+            return;
+        }
+
+        const created = await windowManager.createLayout();
+        if (!created) {
+            toast.error("Failed to create layout.");
         }
     };
 
@@ -43,6 +58,23 @@ const LayoutPagination = observer(() => {
                             {layout.slot}
                         </button>
                     ))}
+                    <button
+                        type="button"
+                        disabled={!canCreateLayout}
+                        aria-label="Create new layout"
+                        className={cn(
+                            buttonVariants({
+                                variant: "ghost",
+                                size: "icon-sm",
+                            }),
+                            "shrink-0",
+                        )}
+                        onClick={() => {
+                            void createLayout();
+                        }}
+                    >
+                        <Plus size={14} />
+                    </button>
                 </div>
             </div>
         </div>

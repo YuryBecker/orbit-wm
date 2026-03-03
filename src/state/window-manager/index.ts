@@ -251,7 +251,7 @@ export class WindowManager {
 
     /** Open layout by explicit slot number. */
     public openLayoutByIndex = async (layoutNumber: number) => {
-        if (layoutNumber <= 0) {
+        if (layoutNumber <= 0 || layoutNumber > MAX_LAYOUTS) {
             return null;
         }
 
@@ -278,6 +278,14 @@ export class WindowManager {
 
     /** Create a new empty layout session and switch to it. */
     public createLayout = async (requestedSlot?: number) => {
+        if (this.layouts.length >= MAX_LAYOUTS) {
+            return null;
+        }
+
+        if (typeof requestedSlot === "number" && requestedSlot > MAX_LAYOUTS) {
+            return null;
+        }
+
         const layoutSlot = Number.isInteger(requestedSlot) && (requestedSlot as number) > 0
             ? (requestedSlot as number)
             : this.getNextAvailableLayoutSlot();
@@ -1505,6 +1513,7 @@ type ResizeContext = {
 };
 
 const MIN_WINDOW_INNER_SIZE_PX = 160;
+const MAX_LAYOUTS = 9;
 const LAST_LAYOUT_STORAGE_KEY = "orbitLayoutId";
 const LEGACY_LAYOUT_STORAGE_KEY = "orbitSessionId";
 

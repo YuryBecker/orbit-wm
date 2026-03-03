@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import { browsers, terminals } from "../index";
+import mirrorTerminal from "state/mirror-terminal";
 import { WindowManager } from ".";
 
 
@@ -143,6 +144,7 @@ class WindowPaneInstance {
     /** Dispose any attached resources. */
     public dispose = () => {
         if (this.terminal) {
+            mirrorTerminal.clearFrom(this.terminal);
             terminals.remove(this.terminal.id);
         }
 
@@ -163,6 +165,5 @@ declare global {
 
 
 export default WindowPaneInstance;
-
 
 

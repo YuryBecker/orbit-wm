@@ -42,7 +42,7 @@ You get multiple terminals and dashboards on one screen, layouts that come back 
 - A local “middle layer” that keeps terminal sessions reliable by using tmux
 
 
-## Quickstart (dev)
+## Quickstart
 - Node.js (recommended: 20+)
 - `tmux` available on your PATH
 - `caddy` available on your PATH

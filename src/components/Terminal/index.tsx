@@ -4,29 +4,33 @@ import type { RefObject } from "react";
 import { observer } from "mobx-react";
 
 import config from "state/config";
-import WindowInstance from "state/window-manager/instance";
-
 
 
 type TerminalProps = {
-    instance: WindowInstance;
-    containerId: string;
+    instance: Instance.WindowPane;
     containerRef: RefObject<HTMLDivElement>;
 };
 
-const Terminal = observer(({ containerId, containerRef }: TerminalProps) => (
-    <div
-        className="flex-1 overflow-hidden"
-        style={{
-            padding: `${config.terminalPadding}px`,
-        }}
-    >
-        <div
-            id={containerId}
-            ref={containerRef}
-            className="h-full w-full overflow-hidden"
-        />
-    </div>
-));
+const Terminal = observer(({ instance, containerRef }: TerminalProps) => {
+    const terminal = instance.terminal;
+
+    return (
+        <>
+            <div
+                className="flex-1 overflow-hidden"
+                style={{
+                    padding: `${config.terminalPadding}px`,
+                    opacity: terminal?.isMirrored ? 0 : 1,
+                    pointerEvents: terminal?.isMirrored ? "none" : "auto",
+                }}
+            >
+                <div
+                    ref={containerRef}
+                    className="h-full w-full overflow-hidden"
+                />
+            </div>
+        </>
+    );
+});
 
 export default Terminal;
