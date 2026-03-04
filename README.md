@@ -135,6 +135,7 @@ Orbit has two internal HTTP services running on loopback:
 Caddy listens on `https://<your-ip>:43123`, handles TLS (`tls internal`), and forwards traffic:
 - `/api/*` and `/socket.io/*` -> middle layer
 - everything else -> frontend
+- `http://<your-ip>:80` -> permanent redirect to `https://<your-ip>:43123`
 
 So from your phone/tablet you only use one URL, and the browser sees a single secure origin for UI + API + WebSockets.
 
@@ -183,12 +184,13 @@ Provide these when starting `npm run middle:dev` or `npm run middle:start`:
 ### One-command environment variables
 `npm run orbit:start` and `npm run orbit:dev` support:
 - `ORBIT_HTTPS_PORT` (default: `43123`)
+- `ORBIT_HTTP_PORT` (default: `8080`)
 - `ORBIT_MIDDLE_PORT` (default: `43120`)
 - `ORBIT_NEXT_PORT` (default: `43121`)
 
 Example:
 ```bash
-ORBIT_HTTPS_PORT=43123 ORBIT_MIDDLE_PORT=43120 ORBIT_NEXT_PORT=43121 npm run orbit:start
+ORBIT_HTTPS_PORT=43123 ORBIT_HTTP_PORT=8080 ORBIT_MIDDLE_PORT=43120 ORBIT_NEXT_PORT=43121 npm run orbit:start
 ```
 
 

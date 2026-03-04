@@ -2,6 +2,10 @@
     auto_https disable_redirects
 }
 
+http://:{$ORBIT_HTTP_PORT} {
+    redir https://{host}:{$ORBIT_HTTPS_PORT}{uri} permanent
+}
+
 https://:{$ORBIT_HTTPS_PORT} {
     tls internal {
         on_demand

@@ -9,6 +9,7 @@ import path from "node:path";
 const ORBIT_HTTPS_PORT = process.env.ORBIT_HTTPS_PORT || "43123";
 const ORBIT_MIDDLE_PORT = process.env.ORBIT_MIDDLE_PORT || "43120";
 const ORBIT_NEXT_PORT = process.env.ORBIT_NEXT_PORT || "43121";
+const ORBIT_HTTP_PORT = process.env.ORBIT_HTTP_PORT || "8080";
 
 const cwd = process.cwd();
 
@@ -117,6 +118,11 @@ const run = async () => {
         return;
     }
 
+    await assertPortFree("0.0.0.0", Number(ORBIT_HTTP_PORT), "ORBIT_HTTP_PORT");
+    if (process.exitCode) {
+        return;
+    }
+
     await assertPortFree("127.0.0.1", Number(ORBIT_MIDDLE_PORT), "ORBIT_MIDDLE_PORT");
     if (process.exitCode) {
         return;
@@ -192,6 +198,7 @@ const run = async () => {
                 name: "caddy",
                 env: {
                     ORBIT_HTTPS_PORT,
+                    ORBIT_HTTP_PORT,
                     ORBIT_MIDDLE_PORT,
                     ORBIT_NEXT_PORT,
                     XDG_DATA_HOME: xdgDataHome,
@@ -219,6 +226,7 @@ const run = async () => {
     if (lanIps.length > 1) {
         console.log(`[orbit-dev] LAN IPv4 addresses: ${lanIps.join(", ")}`);
     }
+    console.log(`[orbit-dev] HTTP redirect: http://${entrypointHost}:${ORBIT_HTTP_PORT} -> https://${entrypointHost}:${ORBIT_HTTPS_PORT}`);
     console.log(`[orbit-dev] Next (internal): http://127.0.0.1:${ORBIT_NEXT_PORT}`);
     console.log(`[orbit-dev] Middle (internal): http://127.0.0.1:${ORBIT_MIDDLE_PORT}`);
     console.log(`[orbit-dev] Caddy root CA (for iOS trust): ${rootCaPath}`);
