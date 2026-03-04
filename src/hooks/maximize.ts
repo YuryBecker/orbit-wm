@@ -33,7 +33,7 @@ const shouldMaximize = (width: number, height: number) => {
 };
 
 /** Maximizes an active window pane if the screen because small enough.
- * This is especially useful for when a mobile keyboard opens and hides the bottom of a terminal. 
+ * This is especially useful for when a mobile keyboard opens and hides the bottom of a terminal.
  * This should maximize to the space between the top and the top of the keyboard.
  * */
 export const useAutoMaximize = () => {
@@ -45,10 +45,10 @@ export const useAutoMaximize = () => {
 
             if (shouldMaximize(metrics.width, metrics.height)) {
                 windowManager.maximizeActive();
-                return
+                return;
             }
 
-            windowManager.unmaximizeAll()
+            windowManager.unmaximizeAll();
         };
 
         toggle();

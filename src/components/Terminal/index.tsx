@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import { observer } from "mobx-react";
 
 import config from "state/config";
+import KeyboardShortcuts from "./KeyboardShortcuts";
 
 
 type TerminalProps = {
@@ -11,7 +12,7 @@ type TerminalProps = {
     containerRef: RefObject<HTMLDivElement>;
 };
 
-const Terminal = observer(({ containerRef }: TerminalProps) => (
+const Terminal = observer(({ instance, containerRef }: TerminalProps) => (
     <>
         <div
             className="flex-1 overflow-hidden"
@@ -24,7 +25,10 @@ const Terminal = observer(({ containerRef }: TerminalProps) => (
                 className="h-full w-full overflow-hidden"
             />
         </div>
+
+        <KeyboardShortcuts instance={ instance }/>
     </>
 ));
+
 
 export default Terminal;

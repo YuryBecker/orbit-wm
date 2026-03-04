@@ -96,6 +96,35 @@ class UiStore {
     /** Cached teardown callback for all listeners. */
     private cleanup: (() => void) | null = null;
 
+    static readonly MOBILE_BREAKPOINT = 768;
+
+
+    /* ---- Computed ---- */
+    /** Estimated keyboard height based on the best observed viewport height. */
+    public get keyboardHeightEstimate() {
+        return Math.max(
+            0,
+            Math.round(this.maxVisualViewportHeight - this.visualViewportHeight),
+        );
+    }
+
+    /** Whether the software keyboard is likely open. */
+    public get isKeyboardOpen() {
+        return this.keyboardHeightEstimate > 80;
+    }
+
+    /** Current visible height that app content can use. */
+    public get visibleHeight() {
+        return Math.round(this.visualViewportHeight || this.innerHeight);
+    }
+
+    public get isMobile(): boolean {
+        const viewportWidth = this.visualViewportWidth || this.innerWidth;
+
+        return viewportWidth > 0 && viewportWidth < UiStore.MOBILE_BREAKPOINT;
+    }
+
+
     /* ---- Actions ---- */
     /** Start tracking screen and viewport metrics. */
     public start = () => {
@@ -203,26 +232,6 @@ class UiStore {
 
         window.dispatchEvent(new Event("resize"));
     };
-
-    /* ---- Computed ---- */
-    /** Estimated keyboard height based on the best observed viewport height. */
-    public get keyboardHeightEstimate() {
-        return Math.max(
-            0,
-            Math.round(this.maxVisualViewportHeight - this.visualViewportHeight),
-        );
-    }
-
-    /** Whether the software keyboard is likely open. */
-    public get isKeyboardOpen() {
-        return this.keyboardHeightEstimate > 80;
-    }
-
-    /** Current visible height that app content can use. */
-    public get visibleHeight() {
-        return Math.round(this.visualViewportHeight || this.innerHeight);
-    }
-
     /* ---- Clean-up ---- */
     /** Reset to defaults and detach listeners. */
     public reset = () => {
