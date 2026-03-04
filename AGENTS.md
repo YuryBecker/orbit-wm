@@ -30,7 +30,7 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 - Update `tsconfig.json` paths to include `state` so `import { sessions } from "state"` works.
 - MobX style:
   - Use `makeAutoObservable(this)` in the constructor.
-  - Section order: `/* ---- Observables ---- */`, `/* ---- Actions ---- */`, `/* ---- Computed ---- */`, `/* ---- Clean-up ---- */`.
+  - Section order: `/* ---- Observables ---- */`, `/* ---- Computed ---- */`, `/* ---- Actions ---- */`, `/* ---- Clean-up ---- */`.
   - Use JSDoc comments for members/methods: `/** This is a comment */` so they show on hover.
   - Do not use inline end-of-line comments.
   - Keep defaults in a `DEFAULTS` object and reset from it.
@@ -82,6 +82,8 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 ## Frontend (TypeScript)
 - TypeScript/TSX uses 4-space indentation and double quotes (match existing files in `src/app`).
 - Prefer PascalCase components and `camelCase` utilities.
+- Use `is...` naming for boolean variables/state (for example, prefer `isShortcutsOpen = false` over `showShortcuts = false`).
+- For React components, always place `className` first in props: first in prop type/destructuring declarations and first at call sites in JSX.
 - Leave two blank lines after the last import before other code.
 - For `Button` components, prefer built-in props (`variant`, `size`, etc.) instead of ad-hoc Tailwind class strings. Only use custom button classes when absolutely necessary.
 
@@ -90,6 +92,7 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 - Use the `cn` utility for class composition via `import { cn } from "@/lib/cn"`.
 - Use `cn` object conditionals for dynamic classes (for example: `cn("flex flex-col", { hidden: ifSomething })`) instead of ternaries inside class strings.
 - In `cn(...)`, group classes by category in one string argument per category (not one class per line), separated by commas.
+- Within each class string, separate category groups with two spaces.
 - Keep category order consistent: positioning first, then flexbox/layout, then sizing (`w-*`, `h-*`) and spacing (`m-*`, `p-*`), then text, then background, then visual/interaction classes (`rounded-*`, `shadow-*`, `pointer-events-*`, animation, etc.).
 - For text colors, prefer semantic classes such as `text-high` and `text-low` instead of raw Tailwind grays.
 - Prefer semantic palette classes (`blue-high`, `blue-mid`, `blue-low`, `red-*`, `yellow-*`, `green-*`) over raw Tailwind color scale classes where equivalents exist.
