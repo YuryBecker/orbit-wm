@@ -58,6 +58,10 @@ type UserRow = {
     lastUserAgent: string | null;
 };
 
+type ExistingUserRow = {
+    id: string;
+};
+
 const clampPairingSeconds = (value: unknown) => {
     const n = Number(value);
     if (!Number.isFinite(n)) {
@@ -180,31 +184,70 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
             ? req.body.label.trim()
             : (ip ? `Device ${ip}` : "Device");
         const isReadonly = row.scope === "readonly" ? 1 : 0;
+        const existingUser = ip
+            ? db
+                .prepare(
+                    `
+                    SELECT id
+                    FROM users
+                    WHERE lastIp = ?
+                    ORDER BY updatedAt DESC
+                    LIMIT 1
+                    `
+                )
+                .get(ip) as ExistingUserRow | undefined
+            : undefined;
+        const effectiveUserId = existingUser?.id ?? userId;
 
-        db.prepare(
-            `
-            INSERT INTO users (
-                id,
+        if (existingUser) {
+            db.prepare(
+                `
+                UPDATE users
+                SET
+                    label = ?,
+                    isApproved = 1,
+                    isReadonly = ?,
+                    updatedAt = ?,
+                    lastSeenAt = ?,
+                    lastIp = ?,
+                    lastUserAgent = ?
+                WHERE id = ?
+                `
+            ).run(
                 label,
-                isApproved,
                 isReadonly,
-                createdAt,
-                updatedAt,
-                lastSeenAt,
-                lastIp,
-                lastUserAgent
-            ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
-            `
-        ).run(
-            userId,
-            label,
-            isReadonly,
-            timestamp,
-            timestamp,
-            timestamp,
-            ip,
-            userAgent,
-        );
+                timestamp,
+                timestamp,
+                ip,
+                userAgent,
+                existingUser.id,
+            );
+        } else {
+            db.prepare(
+                `
+                INSERT INTO users (
+                    id,
+                    label,
+                    isApproved,
+                    isReadonly,
+                    createdAt,
+                    updatedAt,
+                    lastSeenAt,
+                    lastIp,
+                    lastUserAgent
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
+                `
+            ).run(
+                userId,
+                label,
+                isReadonly,
+                timestamp,
+                timestamp,
+                timestamp,
+                ip,
+                userAgent,
+            );
+        }
 
         db.prepare(
             `
@@ -220,14 +263,14 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
         );
 
         const created = createToken({
-            userId,
+            userId: effectiveUserId,
             scope: row.scope,
         });
 
         res.json({
             token: created.token,
             user: {
-                id: userId,
+                id: effectiveUserId,
                 label,
                 scope: row.scope,
                 isReadonly: isReadonly === 1,
@@ -240,36 +283,65 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
         const userAgent = req.get("user-agent") || null;
         const claimCode = randomToken(18);
         const claimHash = sha256(claimCode);
-        const existing = db
-            .prepare(
-                `
-                SELECT id, ip, userAgent, createdAt, status, resolvedAt, claimHash, approvedToken
-                FROM device_requests
-                WHERE status = 'pending' AND ip IS ? AND userAgent IS ?
-                ORDER BY createdAt DESC
-                LIMIT 1
-                `
-            )
-            .get(ip, userAgent) as DeviceRequestRow | undefined;
+        const existing = ip
+            ? db
+                .prepare(
+                    `
+                    SELECT id, ip, userAgent, createdAt, status, resolvedAt, claimHash, approvedToken
+                    FROM device_requests
+                    WHERE ip = ?
+                    ORDER BY createdAt DESC
+                    LIMIT 1
+                    `
+                )
+                .get(ip) as DeviceRequestRow | undefined
+            : db
+                .prepare(
+                    `
+                    SELECT id, ip, userAgent, createdAt, status, resolvedAt, claimHash, approvedToken
+                    FROM device_requests
+                    WHERE status = 'pending' AND ip IS NULL AND userAgent IS ?
+                    ORDER BY createdAt DESC
+                    LIMIT 1
+                    `
+                )
+                .get(userAgent) as DeviceRequestRow | undefined;
+        const createdAt = now();
 
         if (existing) {
             db.prepare(
-                "UPDATE device_requests SET claimHash = ? WHERE id = ?"
-            ).run(claimHash, existing.id);
+                `
+                UPDATE device_requests
+                SET
+                    ip = ?,
+                    userAgent = ?,
+                    createdAt = ?,
+                    status = 'pending',
+                    resolvedAt = NULL,
+                    claimHash = ?,
+                    approvedToken = NULL
+                WHERE id = ?
+                `
+            ).run(
+                ip,
+                userAgent,
+                createdAt,
+                claimHash,
+                existing.id,
+            );
             res.status(202).json({
                 id: existing.id,
-                ip: existing.ip,
-                userAgent: existing.userAgent,
-                createdAt: existing.createdAt,
-                status: existing.status,
-                resolvedAt: existing.resolvedAt,
+                ip,
+                userAgent,
+                createdAt,
+                status: "pending",
+                resolvedAt: null,
                 claimCode,
             });
             return;
         }
 
         const id = `req_${crypto.randomUUID()}`;
-        const createdAt = now();
         db.prepare(
             `
             INSERT INTO device_requests (id, ip, userAgent, createdAt, status, resolvedAt, claimHash, approvedToken)
@@ -396,33 +468,70 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
             ? req.body.label.trim()
             : (row.ip ? `Device ${row.ip}` : "Device");
         const isReadonly = scope === "readonly" ? 1 : 0;
+        const existingUser = row.ip
+            ? db
+                .prepare(
+                    `
+                    SELECT id
+                    FROM users
+                    WHERE lastIp = ?
+                    ORDER BY updatedAt DESC
+                    LIMIT 1
+                    `
+                )
+                .get(row.ip) as ExistingUserRow | undefined
+            : undefined;
+        const effectiveUserId = existingUser?.id ?? userId;
 
-        db.prepare(
-            `
-            INSERT INTO users (
-                id,
+        if (existingUser) {
+            db.prepare(
+                `
+                UPDATE users
+                SET
+                    label = ?,
+                    isApproved = 1,
+                    isReadonly = ?,
+                    updatedAt = ?,
+                    lastIp = ?,
+                    lastUserAgent = ?
+                WHERE id = ?
+                `
+            ).run(
                 label,
-                isApproved,
                 isReadonly,
-                createdAt,
-                updatedAt,
-                lastSeenAt,
-                lastIp,
-                lastUserAgent
-            ) VALUES (?, ?, 1, ?, ?, ?, NULL, ?, ?)
-            `
-        ).run(
-            userId,
-            label,
-            isReadonly,
-            timestamp,
-            timestamp,
-            row.ip,
-            row.userAgent,
-        );
+                timestamp,
+                row.ip,
+                row.userAgent,
+                existingUser.id,
+            );
+        } else {
+            db.prepare(
+                `
+                INSERT INTO users (
+                    id,
+                    label,
+                    isApproved,
+                    isReadonly,
+                    createdAt,
+                    updatedAt,
+                    lastSeenAt,
+                    lastIp,
+                    lastUserAgent
+                ) VALUES (?, ?, 1, ?, ?, ?, NULL, ?, ?)
+                `
+            ).run(
+                userId,
+                label,
+                isReadonly,
+                timestamp,
+                timestamp,
+                row.ip,
+                row.userAgent,
+            );
+        }
 
         const created = createToken({
-            userId,
+            userId: effectiveUserId,
             scope,
         });
 
@@ -433,7 +542,7 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
         res.json({
             token: created.token,
             user: {
-                id: userId,
+                id: effectiveUserId,
                 label,
                 scope,
                 isReadonly: isReadonly === 1,
@@ -470,16 +579,28 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
     });
 
     app.get("/api/device-history", requireControl, (_req, res) => {
-        const requests = db
+        const rows = db
             .prepare(
                 `
                 SELECT id, ip, userAgent, createdAt, status, resolvedAt, claimHash, approvedToken
                 FROM device_requests
                 ORDER BY createdAt DESC
-                LIMIT 200
+                LIMIT 1000
                 `
             )
             .all() as DeviceRequestRow[];
+        const seenIps = new Set<string>();
+        const requests: DeviceRequestRow[] = [];
+
+        rows.forEach((row) => {
+            const key = row.ip || `__request__${row.id}`;
+            if (seenIps.has(key)) {
+                return;
+            }
+
+            seenIps.add(key);
+            requests.push(row);
+        });
 
         res.json({
             requests: requests.map((row) => ({
@@ -494,7 +615,7 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
     });
 
     app.get("/api/users", requireControl, (_req, res) => {
-        const users = db
+        const rows = db
             .prepare(
                 `
                 SELECT
@@ -512,6 +633,18 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
                 `
             )
             .all() as UserRow[];
+        const seenIps = new Set<string>();
+        const users: UserRow[] = [];
+
+        rows.forEach((row) => {
+            const key = row.lastIp || `__user__${row.id}`;
+            if (seenIps.has(key)) {
+                return;
+            }
+
+            seenIps.add(key);
+            users.push(row);
+        });
 
         res.json({
             users: users.map((row) => ({
