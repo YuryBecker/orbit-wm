@@ -103,12 +103,16 @@ const destroySession = (
 ) => {
     const session = dependencies.sessions.get(sessionId);
     if (!session) {
-        console.log(`Session delete requested but not found: ${sessionId}`);
         const deleteStatement = dependencies.db.prepare(
             "DELETE FROM sessions WHERE id = ?",
         );
-        deleteStatement.run(sessionId);
-        return false;
+        const result = deleteStatement.run(sessionId);
+        if (result.changes > 0) {
+            console.log(`Session deleted from DB after PTY exit: ${sessionId}`);
+        } else {
+            console.log(`Session already deleted: ${sessionId}`);
+        }
+        return true;
     }
 
     session.pty.kill();
@@ -234,11 +238,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
     });
 
     app.delete("/api/session/:id", requireControl, (req, res) => {
-        if (!destroySession(dependencies, req.params.id)) {
-            res.status(404).json({ error: "Session not found." });
-            return;
-        }
-
+        destroySession(dependencies, req.params.id);
         res.status(204).end();
     });
 
