@@ -31,6 +31,7 @@ type AuthResolver = (options: {
 type SocketDependencies = {
     resolvePrincipal: AuthResolver;
     getBearerToken: (header: string | undefined | null) => string | null;
+    onActivity?: (sessionId: string) => void;
 };
 
 type OutputBuffer = {
@@ -222,6 +223,7 @@ const createTerminalNamespace = (
 
         socket.join(sessionId);
         console.log(`Socket connected: ${socket.id} -> ${sessionId}`);
+        auth.onActivity?.(sessionId);
 
         const replay = readBuffer(outputBuffers, sessionId);
         if (replay) {
@@ -240,6 +242,7 @@ const createTerminalNamespace = (
                 return;
             }
             session.pty.write(payload.data ?? "");
+            auth.onActivity?.(sessionId);
         });
 
         socket.on("resize", (payload) => {
@@ -254,6 +257,7 @@ const createTerminalNamespace = (
             const rows = Number(payload.rows);
             if (Number.isFinite(cols) && Number.isFinite(rows)) {
                 session.pty.resize(cols, rows);
+                auth.onActivity?.(sessionId);
             }
         });
 
@@ -268,6 +272,7 @@ const createTerminalNamespace = (
     const attachPty = (sessionId: string, pty: IPty) => {
         pty.onData(data => {
             appendToBuffer(outputBuffers, sessionId, data);
+            auth.onActivity?.(sessionId);
 
             if (DEBUG_LOG_OUTPUT) {
                 console.log(data);

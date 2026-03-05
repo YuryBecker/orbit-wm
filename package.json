@@ -10,7 +10,10 @@
     "middle:dev": "tsx watch middle/server.ts",
     "middle:start": "tsx middle/server.ts",
     "orbit:dev": "tsx scripts/orbit-dev.ts",
-    "orbit:start": "tsx scripts/orbit-start.ts"
+    "orbit:start": "tsx scripts/orbit-start.ts",
+    "orbit-sandbox:dev": "tsx scripts/orbit-sandbox-dev.ts",
+    "orbit-sandbox:start": "tsx scripts/orbit-sandbox-start.ts",
+    "orbit-sandbox:image:build": "docker build -t orbit-sandbox-shell:latest -f docker/sandbox/Dockerfile docker/sandbox"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",

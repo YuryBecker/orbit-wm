@@ -87,6 +87,44 @@ For hot-reload development, use:
 npm run orbit:dev
 ```
 
+For sandboxed demo mode (Docker-backed shells), use:
+```bash
+npm run orbit-sandbox:image:build
+npm run orbit-sandbox:dev
+```
+or production:
+```bash
+npm run orbit-sandbox:start
+```
+
+## Sandbox Mode (Docker Demo)
+
+Use this mode to run Orbit as an online demo with isolated shells.
+
+### What it does
+- Runs shell sessions inside Docker instead of host tmux.
+- Uses one sandbox container per authenticated user.
+- Opens multiple terminal windows as separate PTYs inside that same container.
+- Prewarms sandbox capacity on initial page load to reduce first-terminal delay.
+- Cleans up idle/expired sessions automatically.
+
+### Start commands
+```bash
+npm run orbit-sandbox:image:build
+npm run orbit-sandbox:dev
+```
+```bash
+npm run orbit-sandbox:start
+```
+
+### Customizing sandbox behavior
+- Runtime config file: `middle/runtime/docker.config.json`
+- Key controls:
+  - image/shell/network/resource limits
+  - readonly filesystem + tmpfs mounts
+  - prewarm pool size
+  - auto-build behavior
+
 ## Session management
 
 Orbit has session/device management because the app is powerful enough to open real shell sessions.
@@ -190,10 +228,44 @@ Provide these when starting `npm run middle:dev` or `npm run middle:start`:
 - `MIDDLE_PORT`: HTTP port for the middle layer (default: `4001`)
 - `MIDDLE_HOST`: bind host for middle layer (default: `127.0.0.1`)
 - `CLIENT_ORIGIN`: Comma-separated allowlist for CORS origins (example: `http://localhost:43123`)
+- `ORBIT_RUNTIME`: Session runtime backend (`host` or `docker`, default: `host`)
 - `ORBIT_TMUX_BIN`: Path to `tmux` (default: `tmux`)
 - `ORBIT_TMUX_SERVER`: tmux server name passed to `tmux -L` (default: `orbit`)
 - `ORBIT_TERMINAL_REPLAY_BYTES`: Max bytes of terminal output to replay to newly connected clients (default: `200000`)
 - `ORBIT_DEBUG_PTY_OUTPUT`: Set to `1` to log PTY output on the server
+
+When `ORBIT_RUNTIME=docker`, runtime defaults come from:
+- `middle/runtime/docker.config.json`
+
+You can override the config path with:
+- `ORBIT_DOCKER_CONFIG_FILE`
+
+When `ORBIT_RUNTIME=docker`, optional runtime variables:
+- `ORBIT_DOCKER_BIN` (default: `docker`)
+- `ORBIT_DOCKER_IMAGE` (default: `orbit-sandbox-shell:latest`)
+- `ORBIT_DOCKER_SHELL` (default: `/usr/bin/fish`)
+- `ORBIT_DOCKER_NETWORK` (default: `none`)
+- `ORBIT_DOCKER_MEMORY` (default: `512m`)
+- `ORBIT_DOCKER_CPUS` (default: `1`)
+- `ORBIT_DOCKER_PIDS_LIMIT` (default: `128`)
+- `ORBIT_DOCKER_USER` (default: `1000:1000`)
+- `ORBIT_DOCKER_READ_ONLY` (default: `true`)
+- `ORBIT_DOCKER_CAP_DROP_ALL` (default: `true`)
+- `ORBIT_DOCKER_NO_NEW_PRIVILEGES` (default: `true`)
+- `ORBIT_DOCKER_TMPFS` (comma-separated list)
+- `ORBIT_DOCKER_EXTRA_RUN_ARGS` (comma-separated list)
+- `ORBIT_DOCKER_PREWARM_POOL_SIZE` (default: `1`)
+- `ORBIT_DOCKER_AUTO_BUILD` (default for `orbit-sandbox:*`: `1`)
+- `ORBIT_DOCKER_BUILD_CONTEXT` (default: `docker/sandbox`)
+- `ORBIT_DOCKER_BUILD_FILE` (default: `docker/sandbox/Dockerfile`)
+- `ORBIT_SANDBOX_IDLE_TIMEOUT_MS` (default: `900000`)
+- `ORBIT_SANDBOX_TTL_MS` (default: `3600000`)
+- `ORBIT_SANDBOX_CLEANUP_INTERVAL_MS` (default: `30000`)
+- `ORBIT_SANDBOX_ACTIVITY_DEBOUNCE_MS` (default: `5000`)
+
+Runtime prewarm endpoint:
+- `POST /api/runtime/prewarm` (control scope required)
+- In Docker runtime, sessions are grouped per authenticated user so multiple terminal windows share one sandbox container.
 
 ### One-command environment variables
 `npm run orbit:start` and `npm run orbit:dev` support:

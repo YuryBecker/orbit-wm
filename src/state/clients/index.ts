@@ -35,6 +35,7 @@ const DEFAULTS = {
         expiresAt: string;
     } | null,
     pairingDialogOpen: false,
+    runtimePrewarmed: false,
 };
 
 class ClientsStore {
@@ -73,6 +74,9 @@ class ClientsStore {
     /** Whether the pairing QR dialog is open. */
     public pairingDialogOpen = DEFAULTS.pairingDialogOpen;
 
+    /** Whether the runtime prewarm call has succeeded in this tab. */
+    public runtimePrewarmed = DEFAULTS.runtimePrewarmed;
+
     /** Last ids we've already shown a join toast for. */
     private seenJoinRequestIds = new Set<string>();
 
@@ -87,6 +91,9 @@ class ClientsStore {
 
     /** Prevent concurrent claim polling requests. */
     private claimPollInFlight = false;
+
+    /** Prevent concurrent runtime prewarm calls. */
+    private runtimePrewarmInFlight: Promise<boolean> | null = null;
 
 
     /* ---- Computed ---- */
@@ -491,6 +498,39 @@ class ClientsStore {
         return true;
     };
 
+    /** Prewarm runtime capacity to reduce first-terminal startup latency. */
+    public prewarmRuntime = async () => {
+        if (!this.hasAccess || this.me?.isReadonly) {
+            return false;
+        }
+
+        if (this.runtimePrewarmed) {
+            return true;
+        }
+
+        if (this.runtimePrewarmInFlight) {
+            return this.runtimePrewarmInFlight;
+        }
+
+        this.runtimePrewarmInFlight = (async () => {
+            try {
+                const response = await this.authFetch(`${this.baseUrl}/api/runtime/prewarm`, {
+                    method: "POST",
+                });
+                if (!response.ok) {
+                    return false;
+                }
+
+                this.runtimePrewarmed = true;
+                return true;
+            } finally {
+                this.runtimePrewarmInFlight = null;
+            }
+        })();
+
+        return this.runtimePrewarmInFlight;
+    };
+
     /** Clear current client token and pending state. */
     public clearAuthState = () => {
         this.token = null;
@@ -498,6 +538,7 @@ class ClientsStore {
         this.needsApproval = false;
         this.pendingRequestId = null;
         this.pendingRequestClaim = null;
+        this.runtimePrewarmed = false;
         this.instances = {};
         this.seenJoinRequestIds.clear();
         this.stopHostPolling();

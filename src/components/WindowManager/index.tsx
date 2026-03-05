@@ -15,6 +15,7 @@ import { useWindowManagerKeys } from "./keys";
 import Wallpaper from "./Wallpaper";
 import EmptyState from "./EmptyState";
 import AuthWarning from "./AuthWarning";
+import BootOverlay from "./BootOverlay";
 
 
 const WindowManager = observer(() => {
@@ -24,6 +25,8 @@ const WindowManager = observer(() => {
     const dragStartRef = useRef<{ x: number; y: number } | null>(null);
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [isBootingRuntime, setIsBootingRuntime] = useState(true);
+    const [bootMessage, setBootMessage] = useState("Preparing access...");
 
     // Initialize auth/device access state:
     useEffect(() => {
@@ -36,7 +39,34 @@ const WindowManager = observer(() => {
         }
 
         bootstrappedRef.current = true;
-        void windowManager.bootstrap();
+        let cancelled = false;
+
+        const runBootstrap = async () => {
+            setIsBootingRuntime(true);
+            try {
+                setBootMessage("Warming sandbox runtime...");
+                await clients.prewarmRuntime();
+                if (cancelled) {
+                    return;
+                }
+
+                setBootMessage("Loading workspace...");
+                await windowManager.bootstrap();
+                if (cancelled) {
+                    return;
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsBootingRuntime(false);
+                }
+            }
+        };
+
+        void runBootstrap();
+
+        return () => {
+            cancelled = true;
+        };
     }, [clients.ready, clients.hasAccess]);
 
     // Shortcut keys:
@@ -152,6 +182,7 @@ const WindowManager = observer(() => {
             <PairDeviceDialog />
             <EmptyState/>
             <AuthWarning/>
+            {clients.hasAccess && isBootingRuntime ? <BootOverlay message={bootMessage} /> : null}
 
             { windowManager.all.map(instance =>
                 <WindowPane

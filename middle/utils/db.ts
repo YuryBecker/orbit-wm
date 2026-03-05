@@ -17,6 +17,9 @@ const createDatabase = () => {
             name TEXT NOT NULL,
             data TEXT,
             isActive INTEGER NOT NULL DEFAULT 0,
+            runtimeType TEXT NOT NULL DEFAULT 'host',
+            runtimeSessionId TEXT,
+            lastActivityAt TEXT,
             createdAt TEXT NOT NULL,
             updatedAt TEXT NOT NULL
         )
@@ -109,6 +112,27 @@ const createDatabase = () => {
     if (!sessionColumnNames.has("isActive")) {
         db.exec(
             "ALTER TABLE sessions ADD COLUMN isActive INTEGER NOT NULL DEFAULT 0"
+        );
+    }
+    if (!sessionColumnNames.has("runtimeType")) {
+        db.exec(
+            "ALTER TABLE sessions ADD COLUMN runtimeType TEXT NOT NULL DEFAULT 'host'"
+        );
+    }
+    if (!sessionColumnNames.has("runtimeSessionId")) {
+        db.exec(
+            "ALTER TABLE sessions ADD COLUMN runtimeSessionId TEXT"
+        );
+        db.exec(
+            "UPDATE sessions SET runtimeSessionId = id WHERE runtimeSessionId IS NULL"
+        );
+    }
+    if (!sessionColumnNames.has("lastActivityAt")) {
+        db.exec(
+            "ALTER TABLE sessions ADD COLUMN lastActivityAt TEXT"
+        );
+        db.exec(
+            "UPDATE sessions SET lastActivityAt = createdAt WHERE lastActivityAt IS NULL"
         );
     }
 
