@@ -251,6 +251,54 @@ if (runtime.kind === "docker") {
     timer.unref();
 }
 
+/* ---- Graceful Shutdown ---- */
+let isShuttingDown = false;
+
+const destroyDockerSessionsOnShutdown = () => {
+    if (runtime.kind !== "docker") {
+        return;
+    }
+
+    const rows = db
+        .prepare(
+            "SELECT id FROM sessions WHERE runtimeType = 'docker'",
+        )
+        .all() as { id: string }[];
+
+    for (const row of rows) {
+        try {
+            destroySession(sessionDependencies, row.id);
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "Unknown session cleanup error.";
+            console.error(`[shutdown] Failed to destroy session ${row.id}: ${message}`);
+        }
+    }
+};
+
+const shutdown = (signal: NodeJS.Signals) => {
+    if (isShuttingDown) {
+        return;
+    }
+
+    isShuttingDown = true;
+    console.log(`[middle] Received ${signal}. Shutting down...`);
+    destroyDockerSessionsOnShutdown();
+
+    io.close();
+    server.close(() => {
+        process.exit(0);
+    });
+
+    const forceExitTimer = setTimeout(() => {
+        process.exit(0);
+    }, 5000);
+    forceExitTimer.unref();
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+
 /* ---- Server Start ---- */
 server.listen(PORT, HOST, () => {
     console.log(`Middle layer listening on http://${HOST}:${PORT}`);
