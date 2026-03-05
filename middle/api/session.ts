@@ -4,6 +4,7 @@ import type { IPty } from "node-pty";
 import crypto from "crypto";
 
 import type { AuthPrincipal } from "../auth";
+import type { RuntimeKind, SessionRuntime } from "../runtime";
 
 
 
@@ -11,6 +12,8 @@ type Session = {
     id: string;
     name: string;
     createdAt: string;
+    runtimeType: RuntimeKind;
+    runtimeSessionId: string;
     pty: IPty;
 };
 
@@ -19,6 +22,9 @@ type SessionRow = {
     name: string;
     data: string | null;
     isActive: number;
+    runtimeType: RuntimeKind | null;
+    runtimeSessionId: string | null;
+    lastActivityAt: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -31,9 +37,7 @@ type SessionDependencies = {
     requireControl: RequestHandler;
     getPrincipal: (req: Request) => AuthPrincipal | null;
     attachPty: (sessionId: string, pty: IPty) => void;
-    ensureTmuxSession: (sessionId: string) => void;
-    spawnPty: (sessionId: string) => IPty;
-    killTmuxSession: (sessionId: string) => void;
+    runtime: SessionRuntime;
 };
 
 /* ---- Helpers ---- */
@@ -58,40 +62,74 @@ const serializeSessionRow = (row: SessionRow) => ({
     updatedAt: row.updatedAt,
     data: parseData(row.data),
     isActive: row.isActive === 1,
+    runtimeType: row.runtimeType || "host",
 });
+
+const resolveRuntimeGroupId = (principal: AuthPrincipal | null) => {
+    if (!principal) {
+        return "anonymous";
+    }
+
+    if (principal.kind === "host") {
+        return `host:${principal.userId || "local"}`;
+    }
+
+    return `user:${principal.userId || "unknown"}`;
+};
+
+const isRuntimeSessionShared = (
+    dependencies: SessionDependencies,
+    sessionId: string,
+    runtimeSessionId: string,
+) => {
+    const row = dependencies.db
+        .prepare(
+            "SELECT COUNT(*) as count FROM sessions WHERE runtimeSessionId = ? AND id != ?",
+        )
+        .get(runtimeSessionId, sessionId) as { count: number };
+
+    return row.count > 0;
+};
 
 /* ---- Session Lifecycle ---- */
 const createSession = (
     dependencies: SessionDependencies,
+    runtimeGroupId: string,
     name?: string,
     data?: unknown,
     isActive = true,
 ) => {
     const id = `sess_${crypto.randomUUID()}`;
     const timestamp = now();
-    dependencies.ensureTmuxSession(id);
-    const pty = dependencies.spawnPty(id);
+    const runtimeCreated = dependencies.runtime.createSession(id, {
+        runtimeGroupId,
+    });
     const session: Session = {
         id,
         name: name?.trim() || "Terminal Session",
         createdAt: timestamp,
-        pty,
+        runtimeType: dependencies.runtime.kind,
+        runtimeSessionId: runtimeCreated.runtimeSessionId,
+        pty: runtimeCreated.pty,
     };
 
     const insertStatement = dependencies.db.prepare(
-        "INSERT INTO sessions (id, name, data, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sessions (id, name, data, isActive, runtimeType, runtimeSessionId, lastActivityAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     insertStatement.run(
         id,
         session.name,
         data === undefined ? null : JSON.stringify(data),
         isActive ? 1 : 0,
+        session.runtimeType,
+        session.runtimeSessionId,
+        timestamp,
         timestamp,
         timestamp,
     );
 
     dependencies.sessions.set(id, session);
-    dependencies.attachPty(id, pty);
+    dependencies.attachPty(id, session.pty);
     console.log(`Session created: ${id} (${session.name})`);
 
     return session;
@@ -103,6 +141,18 @@ const destroySession = (
 ) => {
     const session = dependencies.sessions.get(sessionId);
     if (!session) {
+        const row = dependencies.db
+            .prepare(
+                "SELECT runtimeSessionId FROM sessions WHERE id = ?",
+            )
+            .get(sessionId) as { runtimeSessionId: string | null } | undefined;
+        if (row) {
+            const runtimeSessionId = row.runtimeSessionId || sessionId;
+            if (!isRuntimeSessionShared(dependencies, sessionId, runtimeSessionId)) {
+                dependencies.runtime.destroySession(sessionId, runtimeSessionId);
+            }
+        }
+
         const deleteStatement = dependencies.db.prepare(
             "DELETE FROM sessions WHERE id = ?",
         );
@@ -118,7 +168,9 @@ const destroySession = (
     session.pty.kill();
     dependencies.sessions.delete(sessionId);
     console.log(`Session deleted: ${sessionId}`);
-    dependencies.killTmuxSession(sessionId);
+    if (!isRuntimeSessionShared(dependencies, sessionId, session.runtimeSessionId)) {
+        dependencies.runtime.destroySession(sessionId, session.runtimeSessionId);
+    }
     const deleteStatement = dependencies.db.prepare(
         "DELETE FROM sessions WHERE id = ?",
     );
@@ -137,10 +189,28 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
     } = dependencies;
 
     app.post("/api/session", requireControl, (req, res) => {
-        const session = createSession(dependencies, req.body?.name, req.body?.data);
+        let session: Session;
+        try {
+            const principal = getPrincipal(req);
+            const runtimeGroupId = resolveRuntimeGroupId(principal);
+            session = createSession(
+                dependencies,
+                runtimeGroupId,
+                req.body?.name,
+                req.body?.data,
+            );
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Failed to create session.";
+            console.error(`Session create failed: ${message}`);
+            res.status(500).json({ error: message });
+            return;
+        }
         const row = db
             .prepare(
-                "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions WHERE id = ?",
+                "SELECT id, name, data, isActive, runtimeType, runtimeSessionId, lastActivityAt, createdAt, updatedAt FROM sessions WHERE id = ?",
             )
             .get(session.id) as SessionRow;
 
@@ -156,7 +226,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
     app.get(["/api/sessions", "/api/sessions/"], requireAuth, (_req, res) => {
         const rows = db
             .prepare(
-                "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions",
+                "SELECT id, name, data, isActive, runtimeType, runtimeSessionId, lastActivityAt, createdAt, updatedAt FROM sessions",
             )
             .all() as SessionRow[];
         res.json({ sessions: rows.map(serializeSessionRow) });
@@ -165,7 +235,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
     app.get("/api/session/:id", requireAuth, (req, res) => {
         const row = db
             .prepare(
-                "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions WHERE id = ?",
+                "SELECT id, name, data, isActive, runtimeType, runtimeSessionId, lastActivityAt, createdAt, updatedAt FROM sessions WHERE id = ?",
             )
             .get(req.params.id) as SessionRow | undefined;
         if (!row) {
@@ -179,7 +249,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
     app.patch("/api/session/:id", requireControl, (req, res) => {
         const existing = db
             .prepare(
-                "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions WHERE id = ?",
+                "SELECT id, name, data, isActive, runtimeType, runtimeSessionId, lastActivityAt, createdAt, updatedAt FROM sessions WHERE id = ?",
             )
             .get(req.params.id) as SessionRow | undefined;
         if (!existing) {
@@ -230,7 +300,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
 
         const row = db
             .prepare(
-                "SELECT id, name, data, isActive, createdAt, updatedAt FROM sessions WHERE id = ?",
+                "SELECT id, name, data, isActive, runtimeType, runtimeSessionId, lastActivityAt, createdAt, updatedAt FROM sessions WHERE id = ?",
             )
             .get(req.params.id) as SessionRow;
 
@@ -260,4 +330,4 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
 };
 
 export type { Session, SessionDependencies };
-export { registerSessionRoutes };
+export { destroySession, registerSessionRoutes };

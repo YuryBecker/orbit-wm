@@ -1,0 +1,22 @@
+{
+    "dockerBin": "docker",
+    "image": "orbit-sandbox-shell:latest",
+    "shell": "/usr/bin/fish",
+    "network": "none",
+    "memory": "512m",
+    "cpus": "1",
+    "pidsLimit": "128",
+    "user": "1000:1000",
+    "readOnly": true,
+    "tmpfs": [
+        "/tmp:rw,noexec,nosuid,nodev",
+        "/home/demo:rw,nosuid,nodev,uid=1000,gid=1000,mode=700"
+    ],
+    "capDropAll": true,
+    "noNewPrivileges": true,
+    "extraRunArgs": [],
+    "prewarmPoolSize": 1,
+    "autoBuild": false,
+    "buildContext": "docker/sandbox",
+    "buildDockerfile": "docker/sandbox/Dockerfile"
+}
