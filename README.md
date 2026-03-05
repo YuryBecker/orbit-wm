@@ -51,6 +51,20 @@ You get multiple terminals and dashboards on one screen, layouts that come back 
   - Linux: `build-essential` (or equivalent), plus Python 3
 
 ### Install
+Clone the Orbit repo, then clone the required `ghostty-web` fork into `./ghostty-web`:
+
+```bash
+git clone <orbit-repo-url>
+cd orbit-wm
+git clone git@github.com:YuryBecker/ghostty-web.git ghostty-web
+```
+
+Orbit depends on a local package reference (`"ghostty-web": "file:./ghostty-web"`), so this folder must exist before install.
+
+We currently use a fork because Orbit depends on behavior patches in `ghostty-web` that are not guaranteed in upstream (notably terminal wheel/touch scroll behavior on mobile and browser-hosted terminals).
+
+Then install dependencies:
+
 ```bash
 npm install
 ```

@@ -1,4 +1,4 @@
-import { makeAutoObservable, reaction } from "mobx";
+import { action, makeAutoObservable, reaction } from "mobx";
 import { FitAddon, init, Terminal as GhosttyTerminal } from "ghostty-web";
 import { toast } from "sonner";
 import { io, Socket } from "socket.io-client";
@@ -193,102 +193,6 @@ class TerminalInstance {
 
         this.windowInstance?.close();
         this.dispose();
-    };
-
-    /** Create a backend session and connect to its Socket.IO channel. */
-    public connect = async (existingSessionId?: string) => {
-        const baseUrl = getMiddleBaseUrl();
-
-        try {
-            let sessionId = existingSessionId;
-            if (!sessionId) {
-                sessionId = await this.createSession(baseUrl);
-            }
-
-            this.sessionId = sessionId;
-            this.status = "Connecting to socket...";
-            const initialSize = this.getCurrentTerminalSize();
-
-            this.socket = io(`${baseUrl}/terminal`, {
-                auth: {
-                    sessionId,
-                    token: clients.getSocketToken(),
-                    cols: initialSize?.cols,
-                    rows: initialSize?.rows,
-                },
-                autoConnect: false,
-                transports: ["websocket"],
-            });
-
-            this.socket.on("connect", () => {
-                if (!this.disposed) {
-                    this.isConnected = true;
-                    this.status = "Connected";
-                    this.syncCurrentTerminalSize();
-                }
-            });
-
-            this.socket.on("connect_error", (error) => {
-                this.term?.write(
-                    `Socket connection error: ${error.message}\r\n`,
-                );
-
-                if (!this.disposed) {
-                    this.isConnected = false;
-                    this.status = "Socket error";
-                }
-
-                if (
-                    existingSessionId &&
-                    error.message.toLowerCase().includes("session not found")
-                ) {
-                    this.status = "Session not found";
-                    toast.warning("Session not found. Closing window.");
-                    window.setTimeout(() => {
-                        if (!this.disposed) {
-                            this.close();
-                        }
-                    }, 1500);
-                }
-            });
-
-            this.socket.on("output", (data) => {
-                if (data?.sessionId === sessionId) {
-                    this.writeFromSocket(data.data ?? "");
-                }
-            });
-
-            this.socket.on("exit", (data) => {
-                if (data?.sessionId === sessionId) {
-                    this.term?.write("\r\nSession closed.\r\n");
-                    if (!this.disposed) {
-                        this.status = "Session closed";
-                        this.isConnected = false;
-                    }
-                    this.close();
-                }
-            });
-
-            this.socket.on("disconnect", () => {
-                if (!this.disposed) {
-                    this.isConnected = false;
-                    this.status = "Disconnected";
-                }
-            });
-
-            if (this.term) {
-                this.bindTerminalToSocket(sessionId);
-            }
-
-            this.socket.connect();
-        } catch (error) {
-            const message =
-                error instanceof Error ? error.message : "Unknown error.";
-            this.term?.write(`Unable to connect: ${message}\r\n`);
-            if (!this.disposed) {
-                this.status = "Connection failed";
-            }
-        }
     };
 
     private flushPendingInput = () => {
@@ -566,6 +470,104 @@ class TerminalInstance {
         }
         this.attemptedFallback = false;
         return sessionId;
+    };
+
+
+    /* ---- WS  ---- */
+    /** Create a backend session and connect to its Socket.IO channel. */
+    public connect = async (existingSessionId?: string) => {
+        const baseUrl = getMiddleBaseUrl();
+
+        try {
+            let sessionId = existingSessionId;
+            if (!sessionId) {
+                sessionId = await this.createSession(baseUrl);
+            }
+
+            this.sessionId = sessionId;
+            this.status = "Connecting to socket...";
+            const initialSize = this.getCurrentTerminalSize();
+
+            this.socket = io(`${baseUrl}/terminal`, {
+                auth: {
+                    sessionId,
+                    token: clients.getSocketToken(),
+                    cols: initialSize?.cols,
+                    rows: initialSize?.rows,
+                },
+                autoConnect: false,
+                transports: ["websocket"],
+            });
+
+            this.socket.on("connect", action(() => {
+                if (!this.disposed) {
+                    this.isConnected = true;
+                    this.status = "Connected";
+                    this.syncCurrentTerminalSize();
+                }
+            }));
+
+            this.socket.on("connect_error", action((error) => {
+                this.term?.write(
+                    `Socket connection error: ${error.message}\r\n`,
+                );
+
+                if (!this.disposed) {
+                    this.isConnected = false;
+                    this.status = "Socket error";
+                }
+
+                if (
+                    existingSessionId &&
+                    error.message.toLowerCase().includes("session not found")
+                ) {
+                    this.status = "Session not found";
+                    toast.warning("Session not found. Closing window.");
+                    window.setTimeout(() => {
+                        if (!this.disposed) {
+                            this.close();
+                        }
+                    }, 1500);
+                }
+            }));
+
+            this.socket.on("output", action((data) => {
+                if (data?.sessionId === sessionId) {
+                    this.writeFromSocket(data.data ?? "");
+                }
+            }));
+
+            this.socket.on("exit", action((data) => {
+                if (data?.sessionId === sessionId) {
+                    this.term?.write("\r\nSession closed.\r\n");
+                    if (!this.disposed) {
+                        this.status = "Session closed";
+                        this.isConnected = false;
+                    }
+                    this.close();
+                }
+            }));
+
+            this.socket.on("disconnect", action(() => {
+                if (!this.disposed) {
+                    this.isConnected = false;
+                    this.status = "Disconnected";
+                }
+            }));
+
+            if (this.term) {
+                this.bindTerminalToSocket(sessionId);
+            }
+
+            this.socket.connect();
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "Unknown error.";
+            this.term?.write(`Unable to connect: ${message}\r\n`);
+            if (!this.disposed) {
+                this.status = "Connection failed";
+            }
+        }
     };
 
 

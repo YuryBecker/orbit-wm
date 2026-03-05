@@ -39,16 +39,24 @@ const shouldMaximize = (width: number, height: number) => {
 export const useAutoMaximize = () => {
     useEffect(() => {
         const toggle = () => {
-            if (!windowManager.activeTerminal) return;
+            const activeWindow = windowManager.active;
+            if (!activeWindow || !windowManager.activeTerminal) return;
 
             const metrics = getViewportMetrics();
+            const isShouldMaximize = shouldMaximize(metrics.width, metrics.height);
 
-            if (shouldMaximize(metrics.width, metrics.height)) {
-                windowManager.maximizeActive();
+            // Keep this idempotent: avoid repeatedly unmaximize/maximize
+            // during viewport scroll/resize churn on mobile.
+            if (isShouldMaximize) {
+                if (!activeWindow.isMaximized) {
+                    windowManager.maximizeActive();
+                }
                 return;
             }
 
-            windowManager.unmaximizeAll();
+            if (activeWindow.isMaximized) {
+                windowManager.unmaximizeAll();
+            }
         };
 
         toggle();

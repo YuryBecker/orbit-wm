@@ -172,12 +172,22 @@ export class WindowManager {
     };
 
     public maximizeActive = () => {
-        if (!this.active) {
+        const active = this.active;
+        if (!active) {
             return console.warn('Cannot maximize active window pane. No active window pane.');
         }
 
+        if (
+            active.isMaximized &&
+            this.all.every((windowPane) =>
+                windowPane.id === active.id ? windowPane.isMaximized : !windowPane.isMaximized,
+            )
+        ) {
+            return;
+        }
+
         this.unmaximizeAll();
-        this.active.maximize();
+        active.maximize();
     };
 
     public computeLayout = () => {

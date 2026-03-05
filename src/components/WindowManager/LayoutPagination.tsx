@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Plus } from "lucide-react";
 import { observer } from "mobx-react";
 import { toast } from "sonner";
+import { useAutoAnimate } from '@formkit/auto-animate/react';
 
 import { windowManager } from "state";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,6 +12,8 @@ import { cn } from "@/lib/utils";
 
 
 const LayoutPagination = observer(() => {
+    const [ parent ] = useAutoAnimate();
+
     const canCreateLayout = windowManager.layouts.length < 9;
 
     useEffect(() => {
@@ -39,7 +42,10 @@ const LayoutPagination = observer(() => {
     return (
         <div className="pointer-events-none fixed bottom-4 left-1/2 z-[85] -translate-x-1/2">
             <div className="pointer-events-auto rounded-md border border-border/60 bg-background/90 px-0 py-0 shadow-lg backdrop-blur">
-                <div className="flex max-w-[90vw] items-center gap-1 overflow-x-auto">
+                <div
+                    className="flex max-w-[90vw] items-center gap-1 overflow-x-hidden"
+                    ref={ parent }
+                >
                     {windowManager.layouts.map((layout) => (
                         <button
                             key={layout.id}
@@ -58,6 +64,7 @@ const LayoutPagination = observer(() => {
                             {layout.slot}
                         </button>
                     ))}
+
                     <button
                         type="button"
                         disabled={!canCreateLayout}

@@ -76,7 +76,7 @@ const spawnChecked = (
         }
 
         if (code && code !== 0) {
-            console.error(`[orbit-start] ${options.name} exited with code ${code}`);
+            console.warn(`[orbit-start] ${options.name} exited with code ${code}`);
             process.exitCode = code;
             options.onFailure?.();
         }

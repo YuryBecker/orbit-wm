@@ -54,6 +54,8 @@ Developer ergonomics is a top priority. APIs should be simple, grammatically obv
 - Specifically, never run `npm run lint`, `eslint`, or any lint auto-fix command.
 - Do not run build commands in this repository.
 - Specifically, never run `npm run build` or `next build`.
+- Do not edit generated distribution artifacts.
+- Specifically, never modify files under `ghostty-web/dist/`; update source files and rebuild instead.
 
 ## Local Middle Server Notes (Orbit)
 - Middle server lives in `middle/` and is split into:
