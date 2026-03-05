@@ -14,9 +14,4 @@ if [ -f "$SKEL_DIR/.config/fish/config.fish" ] && [ ! -f "$HOME_DIR/.config/fish
     cp "$SKEL_DIR/.config/fish/config.fish" "$HOME_DIR/.config/fish/config.fish"
 fi
 
-if [ ! -f "$HOME_DIR/.config/starship.toml" ]; then
-    mkdir -p "$HOME_DIR/.config"
-    starship preset bracketed-segments -o "$HOME_DIR/.config/starship.toml" >/dev/null 2>&1 || true
-fi
-
 exec sh -lc 'trap : TERM INT; sleep infinity & wait'
