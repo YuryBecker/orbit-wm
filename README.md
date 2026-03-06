@@ -229,6 +229,7 @@ Provide these when starting `npm run middle:dev` or `npm run middle:start`:
 - `MIDDLE_HOST`: bind host for middle layer (default: `127.0.0.1`)
 - `CLIENT_ORIGIN`: Comma-separated allowlist for CORS origins (example: `http://localhost:43123`)
 - `ORBIT_RUNTIME`: Session runtime backend (`host` or `docker`, default: `host`)
+- `ORBIT_ACCESS_MODE`: Access policy (`approval` or `auto`). Defaults to `approval` for `host` runtime and `auto` for `docker` runtime.
 - `ORBIT_TMUX_BIN`: Path to `tmux` (default: `tmux`)
 - `ORBIT_TMUX_SERVER`: tmux server name passed to `tmux -L` (default: `orbit`)
 - `ORBIT_TERMINAL_REPLAY_BYTES`: Max bytes of terminal output to replay to newly connected clients (default: `200000`)

@@ -37,6 +37,7 @@ const SANDBOX_CLEANUP_INTERVAL_MS = Number(
 const ACTIVITY_DEBOUNCE_MS = Number(
     process.env.ORBIT_SANDBOX_ACTIVITY_DEBOUNCE_MS || 5_000,
 );
+const ORBIT_ACCESS_MODE = (process.env.ORBIT_ACCESS_MODE || "").toLowerCase();
 
 /* ---- Database ---- */
 const db = createDatabase();
@@ -92,6 +93,10 @@ const io = new Server(server, {
 /* ---- Runtime ---- */
 const runtime = createRuntime();
 runtime.configure();
+const accessMode =
+    ORBIT_ACCESS_MODE === "auto" || ORBIT_ACCESS_MODE === "approval"
+        ? ORBIT_ACCESS_MODE
+        : (runtime.kind === "docker" ? "auto" : "approval");
 
 /* ---- In-memory Session State ---- */
 const sessions = new Map<string, Session>();
@@ -197,6 +202,7 @@ registerSecurityRoutes({
     sha256: auth.sha256,
     randomToken: auth.randomToken,
     now: auth.now,
+    accessMode,
 });
 
 /* ---- Sandbox Cleanup ---- */

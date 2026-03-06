@@ -178,6 +178,7 @@ class ClientsStore {
     public bootstrap = async () => {
         this.stopHostPolling();
         this.stopClaimPolling();
+        this.needsApproval = false;
 
         if (typeof window !== "undefined") {
             this.token = globalThis.localStorage.getItem(STORAGE_TOKEN_KEY);
@@ -213,6 +214,25 @@ class ClientsStore {
         }
 
         const payload = await requestResponse.json();
+        if (typeof payload?.token === "string" && payload.token) {
+            this.token = payload.token;
+            this.persistToken();
+            this.pendingRequestId = null;
+            this.pendingRequestClaim = null;
+            this.persistPendingClaim();
+            this.needsApproval = false;
+            this.stopClaimPolling();
+
+            const approvedMeResponse = await this.authFetch(`${this.baseUrl}/api/me`);
+            if (approvedMeResponse.ok) {
+                this.me = await approvedMeResponse.json();
+                this.startHostPolling();
+            }
+
+            this.ready = true;
+            return;
+        }
+
         this.pendingRequestId = payload?.id ?? null;
         this.pendingRequestClaim = payload?.claimCode ?? null;
         this.persistPendingClaim();

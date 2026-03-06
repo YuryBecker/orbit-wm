@@ -6,6 +6,8 @@ import type { Application, Request, RequestHandler } from "express";
 import type { AuthScope } from "../auth";
 
 
+type AccessMode = "approval" | "auto";
+
 type SecurityDependencies = {
     app: Application;
     db: Database.Database;
@@ -22,6 +24,7 @@ type SecurityDependencies = {
     sha256: (value: string) => string;
     randomToken: (bytes?: number) => string;
     now: () => string;
+    accessMode: AccessMode;
 };
 
 type PairingRow = {
@@ -77,6 +80,59 @@ const getScope = (value: unknown): AuthScope =>
 const getIsoFromNow = (seconds: number) =>
     new Date(Date.now() + seconds * 1000).toISOString();
 
+const createApprovedUserAndToken = (
+    dependencies: SecurityDependencies,
+    options: {
+        ip: string | null;
+        userAgent: string | null;
+        scope: AuthScope;
+    },
+) => {
+    const { db, createToken, now } = dependencies;
+    const timestamp = now();
+    const userId = `usr_${crypto.randomUUID()}`;
+    const label = options.ip ? `Device ${options.ip}` : "Device";
+    const isReadonly = options.scope === "readonly" ? 1 : 0;
+
+    db.prepare(
+        `
+        INSERT INTO users (
+            id,
+            label,
+            isApproved,
+            isReadonly,
+            createdAt,
+            updatedAt,
+            lastSeenAt,
+            lastIp,
+            lastUserAgent
+        ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
+        `,
+    ).run(
+        userId,
+        label,
+        isReadonly,
+        timestamp,
+        timestamp,
+        timestamp,
+        options.ip,
+        options.userAgent,
+    );
+
+    const created = createToken({
+        userId,
+        scope: options.scope,
+    });
+
+    return {
+        userId,
+        label,
+        token: created.token,
+        scope: options.scope,
+        isReadonly: isReadonly === 1,
+    };
+};
+
 const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
     const {
         app,
@@ -87,6 +143,7 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
         sha256,
         randomToken,
         now,
+        accessMode,
     } = dependencies;
 
     app.post("/api/pairing/start", requireControl, (req, res) => {
@@ -281,6 +338,27 @@ const registerSecurityRoutes = (dependencies: SecurityDependencies) => {
     app.post("/api/device-requests", (req, res) => {
         const ip = getRequestIp(req);
         const userAgent = req.get("user-agent") || null;
+
+        if (accessMode === "auto") {
+            const approved = createApprovedUserAndToken(dependencies, {
+                ip,
+                userAgent,
+                scope: "control",
+            });
+
+            res.status(201).json({
+                status: "approved",
+                token: approved.token,
+                user: {
+                    id: approved.userId,
+                    label: approved.label,
+                    scope: approved.scope,
+                    isReadonly: approved.isReadonly,
+                },
+            });
+            return;
+        }
+
         const claimCode = randomToken(18);
         const claimHash = sha256(claimCode);
         const existing = ip

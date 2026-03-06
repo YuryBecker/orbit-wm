@@ -6,9 +6,7 @@ import { clients } from "state";
 
 
 const AuthWarning = observer(() => {
-    if (!clients.ready || clients.hasAccess) return null;
-
-    if (clients.hasAccess) return null;
+    if (!clients.ready || clients.hasAccess || !clients.needsApproval) return null;
 
     return (
         <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm">
