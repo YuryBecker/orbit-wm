@@ -528,7 +528,7 @@ export class WindowManager {
         const instance = this.instances[id];
 
         if (!instance) {
-            console.error(`Could not remove window with id ${ id }. Window not found.`);
+            console.warn(`Could not remove window with id ${ id }. Window not found.`);
             return;
         }
 
