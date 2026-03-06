@@ -10,6 +10,7 @@ type MePayload = {
     label: string;
     scope: "readonly" | "control";
     isReadonly: boolean;
+    accessMode: "approval" | "auto";
 };
 
 

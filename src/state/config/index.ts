@@ -15,6 +15,9 @@ type WallpaperOption = {
     label: string;
 };
 
+const STORAGE_CUSTOM_WALLPAPER_KEY = "orbitCustomWallpaper";
+const MAX_LOCAL_WALLPAPER_BYTES = 4 * 1024 * 1024;
+
 const DEFAULTS = {
     modKey: "ctrlKey" as ModKey,
     modKeyLabel: "Ctrl",
@@ -25,7 +28,7 @@ const DEFAULTS = {
     shadowBlur: 24,
     shadowAmount: 0,
     shadowColor: "rgba(21, 21, 21, 0.25)",
-    wallpaper: { type: "builtin", value: "orbit" } as Wallpaper,
+    wallpaper: { type: "custom", value: "/default-wallpaper.jpeg" } as Wallpaper,
     terminalPadding: 12,
     terminalColor: "#262626",
     terminalOpacity: 1,
@@ -136,6 +139,10 @@ class ConfigStore {
         return getMiddleBaseUrl();
     }
 
+    public get isLocalWallpaperMode() {
+        return clients.me?.accessMode === "auto";
+    }
+
     public get wallpaperStyle() {
         if (this.wallpaper.type === "custom") {
             return `url(${this.wallpaper.value})`;
@@ -186,6 +193,14 @@ class ConfigStore {
     private lastSavedValues: Record<string, string> = {};
     public setWallpaper = (wallpaper: Wallpaper) => {
         this.wallpaper = wallpaper;
+        if (this.isLocalWallpaperMode) {
+            if (wallpaper.type === "custom") {
+                this.persistLocalCustomWallpaper(wallpaper);
+                return;
+            }
+
+            this.persistLocalCustomWallpaper(null);
+        }
         this.saveConfig("wallpaper", wallpaper);
     };
 
@@ -195,6 +210,9 @@ class ConfigStore {
             value: id,
         };
         this.wallpaper = wallpaper;
+        if (this.isLocalWallpaperMode) {
+            this.persistLocalCustomWallpaper(null);
+        }
         this.saveConfig("wallpaper", wallpaper);
     };
 
@@ -204,6 +222,10 @@ class ConfigStore {
             value: dataUrl,
         };
         this.wallpaper = wallpaper;
+        if (this.isLocalWallpaperMode) {
+            this.persistLocalCustomWallpaper(wallpaper);
+            return;
+        }
         this.saveConfig("wallpaper", wallpaper);
     };
 
@@ -452,6 +474,13 @@ class ConfigStore {
             this.borderRadius = payload.config.borderRadius;
         }
 
+        if (this.isLocalWallpaperMode) {
+            const localWallpaper = this.readLocalCustomWallpaper();
+            if (localWallpaper) {
+                this.wallpaper = localWallpaper;
+            }
+        }
+
         return payload?.config ?? null;
     };
 
@@ -556,6 +585,10 @@ class ConfigStore {
     };
 
     public uploadWallpaper = async (file: File) => {
+        if (this.isLocalWallpaperMode) {
+            return this.uploadWallpaperToLocalStorage(file);
+        }
+
         const formData = new FormData();
         formData.append("file", file);
 
@@ -581,6 +614,80 @@ class ConfigStore {
         this.wallpaper = wallpaper;
         this.saveConfig("wallpaper", wallpaper);
         return url;
+    };
+
+    private readLocalCustomWallpaper = () => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+
+        const raw = globalThis.localStorage.getItem(STORAGE_CUSTOM_WALLPAPER_KEY);
+        if (!raw) {
+            return null;
+        }
+
+        try {
+            const parsed = JSON.parse(raw) as Wallpaper;
+            if (parsed?.type !== "custom" || typeof parsed.value !== "string") {
+                return null;
+            }
+
+            return parsed;
+        } catch {
+            return null;
+        }
+    };
+
+    private persistLocalCustomWallpaper = (wallpaper: Wallpaper | null) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        if (!wallpaper) {
+            globalThis.localStorage.removeItem(STORAGE_CUSTOM_WALLPAPER_KEY);
+            return;
+        }
+
+        globalThis.localStorage.setItem(
+            STORAGE_CUSTOM_WALLPAPER_KEY,
+            JSON.stringify(wallpaper),
+        );
+    };
+
+    private readFileAsDataUrl = (file: File) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (typeof reader.result === "string") {
+                    resolve(reader.result);
+                    return;
+                }
+
+                reject(new Error("Failed to read wallpaper file."));
+            };
+            reader.onerror = () => {
+                reject(new Error("Failed to read wallpaper file."));
+            };
+            reader.readAsDataURL(file);
+        });
+
+    private uploadWallpaperToLocalStorage = async (file: File) => {
+        if (!file.type.startsWith("image/")) {
+            return null;
+        }
+
+        if (file.size > MAX_LOCAL_WALLPAPER_BYTES) {
+            return null;
+        }
+
+        const dataUrl = await this.readFileAsDataUrl(file);
+        const wallpaper: Wallpaper = {
+            type: "custom",
+            value: dataUrl,
+        };
+        this.wallpaper = wallpaper;
+        this.persistLocalCustomWallpaper(wallpaper);
+        return dataUrl;
     };
 }
 

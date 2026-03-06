@@ -9,6 +9,7 @@ import path from "path";
 type WallpaperDependencies = {
     app: Application;
     requireControl: RequestHandler;
+    accessMode: "approval" | "auto";
 };
 
 const WALLPAPER_DIR = path.join(process.cwd(), "public", "wallpapers");
@@ -58,8 +59,19 @@ const upload = multer({
     },
 });
 
-const registerWallpaperRoutes = ({ app, requireControl }: WallpaperDependencies) => {
+const registerWallpaperRoutes = ({
+    app,
+    requireControl,
+    accessMode,
+}: WallpaperDependencies) => {
     app.post("/api/wallpaper", requireControl, upload.single("file"), (req, res) => {
+        if (accessMode === "auto") {
+            res.status(403).json({
+                error: "Wallpaper uploads are disabled in demo mode.",
+            });
+            return;
+        }
+
         const file = (req as Request & { file?: Express.Multer.File }).file;
         if (!file) {
             res.status(400).json({ error: "Missing file." });

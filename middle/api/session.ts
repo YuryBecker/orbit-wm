@@ -38,6 +38,7 @@ type SessionDependencies = {
     getPrincipal: (req: Request) => AuthPrincipal | null;
     attachPty: (sessionId: string, pty: IPty) => void;
     runtime: SessionRuntime;
+    accessMode: "approval" | "auto";
 };
 
 /* ---- Helpers ---- */
@@ -325,6 +326,7 @@ const registerSessionRoutes = (dependencies: SessionDependencies) => {
             label: principal.label,
             scope: principal.scope,
             isReadonly: principal.isReadonly,
+            accessMode: dependencies.accessMode,
         });
     });
 };

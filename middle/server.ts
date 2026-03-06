@@ -174,6 +174,7 @@ const sessionDependencies: SessionDependencies = {
     getPrincipal: auth.getPrincipal,
     attachPty: namespace.attachPty,
     runtime,
+    accessMode,
 };
 
 registerSessionRoutes(sessionDependencies);
@@ -192,6 +193,7 @@ registerConfigRoutes({
 registerWallpaperRoutes({
     app,
     requireControl: auth.requireControl,
+    accessMode,
 });
 registerSecurityRoutes({
     app,
